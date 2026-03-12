@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+@theme {
+  /* ── 复古图书馆配色（与 BookShelf 保持一致）─── */
+  --color-parchment: #f5f0e8;
+  --color-parchment-dark: #e8dfd3;
+  --color-parchment-darker: #d9cfc0;
+  --color-leather: #8b4513;
+  --color-leather-light: #a0522d;
+  --color-leather-dark: #6b3410;
+  --color-ink: #2c1810;
+  --color-ink-light: #4a3728;
+  --color-gold: #d4a855;
+  --color-gold-light: #e8c878;
+  --color-gold-dark: #b8923f;
+  --color-spine: #4a3728;
+  --color-spine-light: #6b4f3a;
+  --color-success: #2d6a4f;
+  --color-error: #9b2226;
+  --color-warning: #ca6702;
+
+  /* ── 字体 ─── */
+  --font-serif: 'Georgia', 'Times New Roman', 'Noto Serif SC', serif;
+  --font-mono: 'JetBrains Mono', 'Cascadia Code', 'ui-monospace', monospace;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-serif);
+  background-color: var(--color-parchment);
+  color: var(--color-ink);
+  min-height: 100vh;
+  margin: 0;
+}
+
+/* ── 滚动条 ────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--color-parchment-dark); }
+::-webkit-scrollbar-thumb { background: var(--color-leather-light); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-leather); }
+
+/* ── 文字选中 ───────────────────────────────────────────── */
+::selection { background: var(--color-gold); color: var(--color-ink); }
+
+/* ── 过渡动画 ───────────────────────────────────────────── */
+.fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
+
+.slide-enter-active, .slide-leave-active {
+  transition: all 0.3s ease;
+}
+.slide-enter-from {
+  transform: translateY(-8px);
+  opacity: 0;
+}
+.slide-leave-to {
+  transform: translateY(-8px);
+  opacity: 0;
+}

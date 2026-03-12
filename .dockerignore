@@ -1,0 +1,13 @@
+.git
+__pycache__
+*.pyc
+*.log
+output/
+vectorstore/
+.env
+*.egg-info
+.venv
+node_modules
+frontend/node_modules
+frontend/dist
+.claude
