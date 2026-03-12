@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.pyo
+node_modules/
+dist/
+.env
+*.log
+prompt_history.jsonl
+output/
+vectorstore/
+.claude/
+.DS_Store
