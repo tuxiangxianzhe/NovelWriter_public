@@ -40,15 +40,14 @@ COPY . .
 # 复制前端构建产物
 COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist
 
-# 创建数据目录和默认数据文件（rm -rf 防止旧版挂载残留的同名目录）
-RUN mkdir -p /app/output /app/styles /app/prompts \
-    && rm -rf /app/projects.json /app/xp_presets.json \
-    && echo '{"projects":{},"active_project":""}' > /app/projects.json \
-    && echo '[]' > /app/xp_presets.json
+# 启动入口脚本（负责创建缺失的默认数据文件，不覆盖已有数据）
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
 
 EXPOSE 7860
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:7860/api/health')" || exit 1
 
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["uvicorn", "api_server:app", "--host", "0.0.0.0", "--port", "7860"]

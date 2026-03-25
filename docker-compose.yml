@@ -9,6 +9,11 @@ services:
       - ./styles:/app/styles
       - ./prompts:/app/prompts
       - ./vectorstore:/app/vectorstore
+      # 如需持久化配置（容器重建后保留），先手动创建文件再取消注释：
+      #   touch config.json projects.json xp_presets.json
+      # - ./config.json:/app/config.json
+      # - ./projects.json:/app/projects.json
+      # - ./xp_presets.json:/app/xp_presets.json
     environment:
       - TZ=Asia/Shanghai
     restart: unless-stopped
