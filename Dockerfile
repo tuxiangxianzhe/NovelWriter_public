@@ -42,8 +42,8 @@ COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist
 
 # 创建数据目录和默认数据文件
 RUN mkdir -p /app/output /app/styles /app/prompts \
-    && [ -f /app/projects.json ] || echo '{"projects":{},"active_project":""}' > /app/projects.json \
-    && [ -f /app/xp_presets.json ] || echo '[]' > /app/xp_presets.json
+    && ([ -f /app/projects.json ] || echo '{"projects":{},"active_project":""}' > /app/projects.json) \
+    && ([ -f /app/xp_presets.json ] || echo '[]' > /app/xp_presets.json)
 
 EXPOSE 7860
 
