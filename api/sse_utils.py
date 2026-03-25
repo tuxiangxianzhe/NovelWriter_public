@@ -43,19 +43,24 @@ class ProgressQueue:
 
     def __init__(self):
         self._queue: asyncio.Queue = None  # 延迟初始化，绑定到调用协程的事件循环
+        self._loop: asyncio.AbstractEventLoop = None  # 保存创建时的 event loop 引用
         self.cancelled = False
         self.operation_id = str(uuid4())
 
     def _ensure_queue(self):
         if self._queue is None:
             try:
-                loop = asyncio.get_event_loop()
+                self._loop = asyncio.get_running_loop()
             except RuntimeError:
-                loop = asyncio.new_event_loop()
+                try:
+                    self._loop = asyncio.get_event_loop()
+                except RuntimeError:
+                    self._loop = asyncio.new_event_loop()
             self._queue = asyncio.Queue()
 
-    def __call__(self, value=None, desc: str = "", total=None):
-        """由同步线程调用，将进度放入队列"""
+    def __call__(self, value=None, desc: str = "", total=None, content: str = ""):
+        """由同步线程调用，将进度放入队列。
+        content: 可选的流式文本内容，前端可用于实时预览。"""
         self._ensure_queue()
         event = {"type": "progress", "message": desc}
         if value is not None:
@@ -63,11 +68,17 @@ class ProgressQueue:
                 event["value"] = float(value)
             except (TypeError, ValueError):
                 pass
+        if content:
+            event["content"] = content
         try:
-            loop = asyncio.get_event_loop()
-            loop.call_soon_threadsafe(self._queue.put_nowait, event)
+            # 使用创建时保存的 loop 引用（而非从当前线程获取，工作线程中可能拿不到正确的 loop）
+            if self._loop and self._loop.is_running():
+                self._loop.call_soon_threadsafe(self._queue.put_nowait, event)
+            else:
+                # 回退：直接放入（仅当同一线程时安全）
+                self._queue.put_nowait(event)
         except Exception as e:
-            logger.debug(f"ProgressQueue put failed: {e}")
+            logger.warning(f"ProgressQueue put failed: {e}")
 
     def empty(self) -> bool:
         return self._queue is None or self._queue.empty()

@@ -99,8 +99,14 @@ def debug_log(prompt: str, response_content: str):
         f"\n[######################################### Response #########################################]\n{response_content}\n"
     )
 
-def invoke_with_cleaning(llm_adapter, prompt: str, max_retries: int = 3, system_message: str = "") -> str:
-    """调用 LLM 并清理返回结果，同时将 prompt+response 写入 prompt_history.jsonl"""
+def invoke_with_cleaning(llm_adapter, prompt: str, max_retries: int = 3,
+                         system_message: str = "", progress=None,
+                         enable_streaming: bool = True) -> str:
+    """调用 LLM 并清理返回结果，同时将 prompt+response 写入 prompt_history.jsonl
+
+    当 progress 不为 None 且 enable_streaming=True 时，使用流式调用（invoke_stream），
+    实时通过 progress 回调推送已生成的文本。流式中途失败时返回已收集的部分文本。
+    """
     import uuid
 
     # 估算 prompt token 数（中文约 1.5-2 token/字符）
@@ -122,6 +128,10 @@ def invoke_with_cleaning(llm_adapter, prompt: str, max_retries: int = 3, system_
     # 尝试从 adapter 获取模型名（兼容不同 adapter 实现）
     _model = getattr(llm_adapter, 'model_name', '') or getattr(llm_adapter, 'model', '')
 
+    # 是否启用流式
+    use_stream = (enable_streaming and progress is not None
+                  and hasattr(llm_adapter, 'invoke_stream'))
+
     # 立即写入 pending 记录，让前端可以先看到 prompt
     call_id = uuid.uuid4().hex[:12]
     _append_prompt_history(prompt, "", model=str(_model), call_id=call_id, status="pending")
@@ -132,8 +142,48 @@ def invoke_with_cleaning(llm_adapter, prompt: str, max_retries: int = 3, system_
     while retry_count < max_retries:
         attempt_start = time.time()
         try:
-            logging.info(f"[invoke] 第 {retry_count + 1}/{max_retries} 次调用, model={_model}...")
-            result = llm_adapter.invoke(prompt, system_message=system_message) if system_message else llm_adapter.invoke(prompt)
+            logging.info(f"[invoke] 第 {retry_count + 1}/{max_retries} 次调用, "
+                         f"model={_model}, stream={use_stream}...")
+
+            if use_stream:
+                # 流式调用：逐片段接收，实时推送进度
+                chunks = []
+                char_count = 0
+                try:
+                    for chunk in llm_adapter.invoke_stream(prompt, system_message=system_message):
+                        chunks.append(chunk)
+                        char_count += len(chunk)
+                        elapsed_so_far = time.time() - attempt_start
+                        if progress is not None:
+                            accumulated = "".join(chunks)
+                            progress(None,
+                                     desc=f"LLM 生成中… 已输出 {char_count} 字 ({elapsed_so_far:.0f}s)",
+                                     content=accumulated)
+                except Exception as stream_err:
+                    # 流式中途失败：保留已收集的部分文本
+                    partial = "".join(chunks)
+                    elapsed = time.time() - attempt_start
+                    err_type = type(stream_err).__name__
+                    logging.warning(f"[invoke] 流式输出中断: {err_type}: {stream_err}, "
+                                    f"已收集 {len(partial)} 字, 耗时={elapsed:.1f}s")
+                    if partial.strip():
+                        # 有部分内容：清理后标记为不完整并返回
+                        partial = partial.replace("```", "").strip()
+                        warning_tag = f"\n\n⚠️ 【生成中断】LLM 输出在 {elapsed:.0f}s 后中断（{err_type}），以上为已生成的部分内容（{len(partial)} 字）。"
+                        _append_prompt_history(prompt, f"[PARTIAL:{len(partial)}字] {partial[:500]}...",
+                                               model=str(_model), call_id=call_id,
+                                               status="partial", elapsed=elapsed)
+                        if progress is not None:
+                            progress(None, desc=f"⚠️ 生成中断，已保留 {len(partial)} 字部分内容")
+                        return partial + warning_tag
+                    else:
+                        # 没有任何内容，当作普通失败处理
+                        raise stream_err
+                result = "".join(chunks)
+            else:
+                # 非流式调用
+                result = llm_adapter.invoke(prompt, system_message=system_message) if system_message else llm_adapter.invoke(prompt)
+
             elapsed = time.time() - attempt_start
             result_len = len(result) if result else 0
             logging.info(f"[invoke] LLM 返回, 耗时={elapsed:.1f}s, 返回字符数={result_len}")

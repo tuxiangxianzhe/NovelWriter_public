@@ -33,7 +33,8 @@ def save_llm_config(body: LLMConfigCreate):
         body.config_name, body.api_key, body.base_url,
         body.interface_format, body.model_name,
         body.temperature, body.max_tokens, body.timeout,
-        body.enable_thinking, body.thinking_budget
+        body.enable_thinking, body.thinking_budget,
+        body.enable_streaming,
     )
     if msg.startswith("❌"):
         raise HTTPException(status_code=400, detail=msg)

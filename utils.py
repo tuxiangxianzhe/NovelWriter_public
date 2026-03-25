@@ -36,7 +36,8 @@ def clear_file_content(filename: str):
         print(f"[clear_file_content] 无法清空文件 '{filename}' 的内容：{e}")
 
 def atomic_write_text(content: str, file_path: str):
-    """原子写入文本文件：写入临时文件 → fsync → os.replace()"""
+    """原子写入文本文件：写入临时文件 → fsync → os.replace()
+    如果原子替换失败（如 Docker 单文件挂载跨设备），回退到直接写入。"""
     dir_name = os.path.dirname(file_path) or '.'
     try:
         fd, tmp_path = tempfile.mkstemp(dir=dir_name, suffix='.tmp')
@@ -46,33 +47,50 @@ def atomic_write_text(content: str, file_path: str):
                 f.flush()
                 os.fsync(f.fileno())
             os.replace(tmp_path, file_path)
-        except BaseException:
+            return
+        except OSError:
             try:
                 os.unlink(tmp_path)
             except OSError:
                 pass
-            raise
-    except Exception as e:
-        print(f"[atomic_write_text] 保存文件时发生错误: {e}")
-        raise
+    except OSError:
+        pass
+
+    # 回退：直接写入
+    with open(file_path, 'w', encoding='utf-8') as f:
+        f.write(content)
+        f.flush()
+        os.fsync(f.fileno())
 
 
 def atomic_write_json(data, file_path: str, indent: int = 4):
-    """原子写入 JSON 文件：写入临时文件 → fsync → os.replace()"""
+    """原子写入 JSON 文件：写入临时文件 → fsync → os.replace()
+    如果原子替换失败（如 Docker 单文件挂载跨设备），回退到直接写入。"""
     dir_name = os.path.dirname(file_path) or '.'
-    fd, tmp_path = tempfile.mkstemp(dir=dir_name, suffix='.tmp')
     try:
-        with os.fdopen(fd, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=indent)
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(tmp_path, file_path)
-    except BaseException:
+        fd, tmp_path = tempfile.mkstemp(dir=dir_name, suffix='.tmp')
         try:
-            os.unlink(tmp_path)
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=indent)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, file_path)
+            return
         except OSError:
-            pass
-        raise
+            # os.replace 跨设备失败（Docker bind mount），清理临时文件后回退
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+    except OSError:
+        # mkstemp 失败（目录不存在等）
+        pass
+
+    # 回退：直接写入
+    with open(file_path, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=indent)
+        f.flush()
+        os.fsync(f.fileno())
 
 
 def save_string_to_txt(content: str, filename: str):

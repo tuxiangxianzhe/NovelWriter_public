@@ -64,6 +64,7 @@ const llmForm = ref({
   timeout: 600,
   enable_thinking: false,
   thinking_budget: 0,
+  enable_streaming: true,
 })
 
 const interfaceFormats = ['OpenAI', 'Claude', 'Gemini', 'Ollama', 'Azure']
@@ -83,6 +84,7 @@ function loadLLMConfig(name: string) {
     timeout: (c.timeout as number) ?? 600,
     enable_thinking: (c.enable_thinking as boolean) ?? false,
     thinking_budget: (c.thinking_budget as number) ?? 0,
+    enable_streaming: (c.enable_streaming as boolean) ?? true,
   }
 }
 
@@ -186,7 +188,7 @@ onMounted(() => configStore.loadAll())
             <option value="">— 选择已有配置 —</option>
             <option v-for="c in configStore.llmChoices" :key="c" :value="c">{{ c }}</option>
           </select>
-          <button @click="selectedLLM = ''; llmForm = { config_name: '', api_key: '', base_url: '', interface_format: 'OpenAI', model_name: '', temperature: 0.7, max_tokens: 4096, timeout: 600, enable_thinking: false, thinking_budget: 0 }"
+          <button @click="selectedLLM = ''; llmForm = { config_name: '', api_key: '', base_url: '', interface_format: 'OpenAI', model_name: '', temperature: 0.7, max_tokens: 4096, timeout: 600, enable_thinking: false, thinking_budget: 0, enable_streaming: true }"
             class="border border-[var(--color-parchment-darker)] rounded-md px-3 py-2 text-sm hover:bg-[var(--color-parchment)] transition-colors" type="button">
             + 新建
           </button>
@@ -236,6 +238,13 @@ onMounted(() => configStore.loadAll())
               <input type="checkbox" v-model="llmForm.enable_thinking" class="accent-[var(--color-leather)]" />
               启用 Thinking 模式
             </label>
+          </div>
+          <div class="flex items-center gap-3">
+            <label class="flex items-center gap-2 text-sm cursor-pointer select-none">
+              <input type="checkbox" v-model="llmForm.enable_streaming" class="accent-[var(--color-leather)]" />
+              流式输出
+            </label>
+            <span class="text-xs text-[var(--color-ink-light)]">实时显示生成进度，超时时保留已生成内容</span>
           </div>
           <div v-if="llmForm.enable_thinking">
             <label class="block text-xs text-[var(--color-ink-light)] mb-1">Thinking Budget</label>

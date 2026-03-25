@@ -77,6 +77,7 @@ def update_project(name: str, body: ProjectUpdate):
         cont_step_chars_text=body.cont_step_chars_text,
         cont_step_arcs_text=body.cont_step_arcs_text,
         cont_step_char_state_text=body.cont_step_char_state_text,
+        xp_selected_presets=body.xp_selected_presets,
     )
     return {"message": msg}
 

@@ -19,6 +19,7 @@ class LLMConfigCreate(BaseModel):
     timeout: int = 600
     enable_thinking: bool = False
     thinking_budget: int = 0
+    enable_streaming: bool = True
 
 
 class EmbeddingConfigCreate(BaseModel):
@@ -62,6 +63,7 @@ class ProjectUpdate(BaseModel):
     filepath: Optional[str] = None
     user_guidance: str = ""
     xp_type: str = ""
+    xp_selected_presets: Optional[List[str]] = None
     # 持久化到 project_config.json 的扩展字段
     llm_config_name: str = ""
     emb_config_name: str = ""
@@ -313,6 +315,50 @@ class ConsistencyCheckRequest(BaseModel):
 
 
 # ── SSE 事件 ──────────────────────────────────────────────────────────────────
+
+class HumanizerRequest(BaseModel):
+    llm_config_name: str
+    filepath: str
+    chapter_num: int
+    enable_r8: bool = False
+    user_focus: str = ""
+    depth: str = "standard"  # quick / standard / deep
+
+
+class BatchHumanizerRequest(BaseModel):
+    llm_config_name: str
+    filepath: str
+    start_chapter: int
+    end_chapter: int
+    enable_r8: bool = False
+    user_focus: str = ""
+    depth: str = "standard"
+
+
+class ReviseStepRequest(BaseModel):
+    llm_config_name: str
+    original_content: str
+    revision_guidance: str
+    step_type: str = ""  # core_seed / characters / char_state / world / plot
+
+
+class BrainstormMessage(BaseModel):
+    role: str  # "user" or "assistant"
+    content: str
+
+
+class BrainstormChatRequest(BaseModel):
+    llm_config_name: str
+    filepath: str
+    messages: List[BrainstormMessage]
+    include_core_seed: bool = True
+    include_characters: bool = True
+    include_world_building: bool = True
+    include_plot: bool = True
+    include_blueprint: bool = False
+    include_character_state: bool = False
+    extra_context: str = ""
+
 
 class SSEEvent(BaseModel):
     type: str  # progress | result | error | done

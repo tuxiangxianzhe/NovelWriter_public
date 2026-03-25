@@ -67,7 +67,7 @@ export interface SSEHandle {
 export function postSSE(
   url: string,
   body: Record<string, unknown>,
-  onProgress: (msg: string, value?: number) => void,
+  onProgress: (msg: string, value?: number, content?: string) => void,
   onResult: (content: string) => void,
   onError: (msg: string) => void,
   onDone: () => void,
@@ -119,7 +119,7 @@ export function postSSE(
           try {
             const event = JSON.parse(json)
             if (event.type === 'started') operationId = event.operation_id ?? ''
-            else if (event.type === 'progress') onProgress(event.message ?? '', event.value)
+            else if (event.type === 'progress') onProgress(event.message ?? '', event.value, event.content)
             else if (event.type === 'result') onResult(event.content ?? '')
             else if (event.type === 'error') onError(event.message ?? '未知错误')
             else if (event.type === 'done') onDone()
@@ -188,10 +188,22 @@ export const generateApi = {
     api.post(`/generate/architecture/continue/assemble`, body),
   compressContext: (body: { llm_config_name: string; filepath: string; include_world_building?: boolean }) =>
     api.post(`/generate/compress-context`, body, { timeout: 600000 }),
+  humanize: () => `/generate/humanize`,
+  batchHumanize: () => `/generate/humanize/batch`,
+  reviseStep: () => `/generate/architecture/step/revise`,
   stepCoreSeed: () => `/generate/architecture/step/core_seed`,
   stepCharacters: () => `/generate/architecture/step/characters`,
   stepWorld: () => `/generate/architecture/step/world`,
   stepPlot: () => `/generate/architecture/step/plot`,
+}
+
+// ── XP Presets ───────────────────────────────────────────────────────────────
+export const xpPresetsApi = {
+  list: () => api.get('/xp-presets'),
+  create: (name: string, content: string) => api.post('/xp-presets', { name, content }),
+  update: (name: string, data: { name?: string; content?: string }) =>
+    api.put(`/xp-presets/${encodeURIComponent(name)}`, data),
+  delete: (name: string) => api.delete(`/xp-presets/${encodeURIComponent(name)}`),
 }
 
 // ── Styles ───────────────────────────────────────────────────────────────────
@@ -247,4 +259,9 @@ export const logsApi = {
 // ── Consistency ───────────────────────────────────────────────────────────────
 export const consistencyApi = {
   checkUrl: () => `/consistency/check`,
+}
+
+// ── Brainstorm ───────────────────────────────────────────────────────────────
+export const brainstormApi = {
+  chatUrl: () => `/brainstorm/chat`,
 }

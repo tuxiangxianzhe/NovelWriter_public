@@ -43,7 +43,8 @@ app.add_middleware(
 
 from api.routers import (
     projects, config, presets, generate,
-    styles, knowledge, files, logs, consistency,
+    styles, knowledge, files, logs, consistency, xp_presets,
+    brainstorm,
 )
 
 app.include_router(projects.router, prefix="/api")
@@ -55,6 +56,8 @@ app.include_router(knowledge.router, prefix="/api")
 app.include_router(files.router, prefix="/api")
 app.include_router(logs.router, prefix="/api")
 app.include_router(consistency.router, prefix="/api")
+app.include_router(xp_presets.router, prefix="/api")
+app.include_router(brainstorm.router, prefix="/api")
 
 # ── 健康检查 ──────────────────────────────────────────────────────────────────
 

@@ -407,7 +407,8 @@ def Novel_architecture_generate(
     enable_thinking: bool = False,
     num_characters: str = "3-6",
     thinking_budget: int = 0,
-    narrative_instruction: str = ""
+    narrative_instruction: str = "",
+    progress=None
 ) -> dict:
     """
     依次调用:
@@ -443,7 +444,7 @@ def Novel_architecture_generate(
             word_number=word_number,
             user_guidance=user_guidance  # 修复：添加内容指导
         )
-        core_seed_result = invoke_with_cleaning(llm_adapter, prompt_core)
+        core_seed_result = invoke_with_cleaning(llm_adapter, prompt_core, progress=progress)
         if not core_seed_result.strip():
             logging.warning("core_seed_prompt generation failed and returned empty.")
             save_partial_architecture_data(filepath, partial_data)
@@ -460,7 +461,7 @@ def Novel_architecture_generate(
             user_guidance=user_guidance,
             num_characters=num_characters
         )
-        character_dynamics_result = invoke_with_cleaning(llm_adapter, prompt_character)
+        character_dynamics_result = invoke_with_cleaning(llm_adapter, prompt_character, progress=progress)
         if not character_dynamics_result.strip():
             logging.warning("character_dynamics_prompt generation failed.")
             save_partial_architecture_data(filepath, partial_data)
@@ -475,7 +476,7 @@ def Novel_architecture_generate(
         prompt_char_state_init = prompt_definitions.create_character_state_prompt.format(
             character_dynamics=partial_data["character_dynamics_result"].strip()
         )
-        character_state_init = invoke_with_cleaning(llm_adapter, prompt_char_state_init)
+        character_state_init = invoke_with_cleaning(llm_adapter, prompt_char_state_init, progress=progress)
         if not character_state_init.strip():
             logging.warning("create_character_state_prompt generation failed.")
             save_partial_architecture_data(filepath, partial_data)
@@ -493,7 +494,7 @@ def Novel_architecture_generate(
             core_seed=partial_data["core_seed_result"].strip(),
             user_guidance=user_guidance  # 修复：添加用户指导
         )
-        world_building_result = invoke_with_cleaning(llm_adapter, prompt_world)
+        world_building_result = invoke_with_cleaning(llm_adapter, prompt_world, progress=progress)
         if not world_building_result.strip():
             logging.warning("world_building_prompt generation failed.")
             save_partial_architecture_data(filepath, partial_data)
@@ -514,7 +515,7 @@ def Novel_architecture_generate(
         )
         if narrative_instruction:
             prompt_plot = f"\n【叙事风格指导-架构层】\n{narrative_instruction}\n\n" + prompt_plot
-        plot_arch_result = invoke_with_cleaning(llm_adapter, prompt_plot)
+        plot_arch_result = invoke_with_cleaning(llm_adapter, prompt_plot, progress=progress)
         if not plot_arch_result.strip():
             logging.warning("plot_architecture_prompt generation failed.")
             save_partial_architecture_data(filepath, partial_data)
@@ -570,7 +571,8 @@ def generate_core_seed(
     max_tokens: int = 2048,
     timeout: int = 600,
     enable_thinking: bool = False,
-    thinking_budget: int = 0
+    thinking_budget: int = 0,
+    progress=None
 ) -> str:
     """仅生成核心种子，返回结果文本。"""
     llm_adapter = create_llm_adapter(
@@ -591,7 +593,7 @@ def generate_core_seed(
         word_number=word_number,
         user_guidance=user_guidance
     )
-    result = invoke_with_cleaning(llm_adapter, prompt_core)
+    result = invoke_with_cleaning(llm_adapter, prompt_core, progress=progress)
     if not result.strip():
         raise RuntimeError("核心种子生成失败，LLM 返回为空。")
     return result
@@ -609,7 +611,8 @@ def generate_character_dynamics(
     timeout: int = 600,
     enable_thinking: bool = False,
     thinking_budget: int = 0,
-    num_characters: str = "3-6"
+    num_characters: str = "3-6",
+    progress=None
 ) -> tuple:
     """根据种子生成角色动力学 + 角色状态，返回 (character_dynamics, character_state) 元组。"""
     character_dynamics = generate_character_dynamics_only(
@@ -617,13 +620,14 @@ def generate_character_dynamics(
         llm_model=llm_model, core_seed=core_seed, user_guidance=user_guidance,
         temperature=temperature, max_tokens=max_tokens, timeout=timeout,
         enable_thinking=enable_thinking, thinking_budget=thinking_budget,
-        num_characters=num_characters
+        num_characters=num_characters, progress=progress
     )
     character_state = generate_character_state_only(
         interface_format=interface_format, api_key=api_key, base_url=base_url,
         llm_model=llm_model, character_dynamics=character_dynamics,
         temperature=temperature, max_tokens=max_tokens, timeout=timeout,
-        enable_thinking=enable_thinking, thinking_budget=thinking_budget
+        enable_thinking=enable_thinking, thinking_budget=thinking_budget,
+        progress=progress
     )
     return (character_dynamics, character_state)
 
@@ -640,7 +644,8 @@ def generate_character_dynamics_only(
     timeout: int = 600,
     enable_thinking: bool = False,
     thinking_budget: int = 0,
-    num_characters: str = "3-6"
+    num_characters: str = "3-6",
+    progress=None
 ) -> str:
     """仅生成角色动力学，返回动力学文本。"""
     llm_adapter = create_llm_adapter(
@@ -653,7 +658,7 @@ def generate_character_dynamics_only(
         user_guidance=user_guidance,
         num_characters=num_characters
     )
-    character_dynamics = invoke_with_cleaning(llm_adapter, prompt_character)
+    character_dynamics = invoke_with_cleaning(llm_adapter, prompt_character, progress=progress)
     if not character_dynamics.strip():
         raise RuntimeError("角色动力学生成失败，LLM 返回为空。")
     return character_dynamics
@@ -715,7 +720,8 @@ def generate_character_state_only(
     max_tokens: int = 2048,
     timeout: int = 600,
     enable_thinking: bool = False,
-    thinking_budget: int = 0
+    thinking_budget: int = 0,
+    progress=None
 ) -> str:
     """根据角色动力学生成角色状态，返回状态文本。"""
     llm_adapter = create_llm_adapter(
@@ -726,7 +732,7 @@ def generate_character_state_only(
     prompt_char_state = prompt_definitions.create_character_state_prompt.format(
         character_dynamics=character_dynamics.strip()
     )
-    character_state = invoke_with_cleaning(llm_adapter, prompt_char_state)
+    character_state = invoke_with_cleaning(llm_adapter, prompt_char_state, progress=progress)
     if not character_state.strip():
         raise RuntimeError("角色状态生成失败，LLM 返回为空。")
     return character_state
@@ -744,7 +750,8 @@ def generate_world_building(
     max_tokens: int = 2048,
     timeout: int = 600,
     enable_thinking: bool = False,
-    thinking_budget: int = 0
+    thinking_budget: int = 0,
+    progress=None
 ) -> str:
     """根据种子生成世界观，可选注入角色动力学。"""
     llm_adapter = create_llm_adapter(
@@ -765,7 +772,7 @@ def generate_world_building(
         core_seed=core_seed.strip(),
         user_guidance=effective_guidance
     )
-    result = invoke_with_cleaning(llm_adapter, prompt_world)
+    result = invoke_with_cleaning(llm_adapter, prompt_world, progress=progress)
     if not result.strip():
         raise RuntimeError("世界观生成失败，LLM 返回为空。")
     return result
@@ -786,7 +793,8 @@ def generate_plot_architecture(
     timeout: int = 600,
     enable_thinking: bool = False,
     thinking_budget: int = 0,
-    narrative_instruction: str = ""
+    narrative_instruction: str = "",
+    progress=None
 ) -> str:
     """根据前三步生成情节架构，返回结果文本。"""
     llm_adapter = create_llm_adapter(
@@ -809,7 +817,7 @@ def generate_plot_architecture(
     )
     if narrative_instruction:
         prompt_plot = f"\n【叙事风格指导-架构层】\n{narrative_instruction}\n\n" + prompt_plot
-    result = invoke_with_cleaning(llm_adapter, prompt_plot)
+    result = invoke_with_cleaning(llm_adapter, prompt_plot, progress=progress)
     if not result.strip():
         raise RuntimeError("情节架构生成失败，LLM 返回为空。")
     return result
@@ -873,7 +881,8 @@ def continue_novel_architecture(
     enable_thinking: bool = False,
     thinking_budget: int = 0,
     narrative_instruction: str = "",
-    num_characters: str = "1-3"
+    num_characters: str = "1-3",
+    progress=None
 ) -> str:
     """
     在已有小说架构基础上生成续写扩展方案。
@@ -928,7 +937,7 @@ def continue_novel_architecture(
     )
 
     logging.info("Generating continuation architecture...")
-    continuation_result = invoke_with_cleaning(llm_adapter, prompt_text)
+    continuation_result = invoke_with_cleaning(llm_adapter, prompt_text, progress=progress)
     if not continuation_result.strip():
         raise RuntimeError("续写架构生成失败，LLM 返回为空。")
 
@@ -951,7 +960,8 @@ def continue_generate_seed(
     timeout: int = 600,
     enable_thinking: bool = False,
     thinking_budget: int = 0,
-    narrative_instruction: str = ""
+    narrative_instruction: str = "",
+    progress=None
 ) -> str:
     """
     续写步骤0: 生成续写方向大纲（续写种子）。
@@ -997,7 +1007,7 @@ def continue_generate_seed(
     )
 
     logging.info("Generating continuation seed...")
-    result = invoke_with_cleaning(llm_adapter, prompt_text)
+    result = invoke_with_cleaning(llm_adapter, prompt_text, progress=progress)
     if not result.strip():
         raise RuntimeError("续写方向大纲生成失败，LLM 返回为空。")
     return result
@@ -1017,7 +1027,8 @@ def continue_generate_world(
     timeout: int = 600,
     enable_thinking: bool = False,
     thinking_budget: int = 0,
-    narrative_instruction: str = ""
+    narrative_instruction: str = "",
+    progress=None
 ) -> str:
     """
     续写步骤0.5: 生成世界观扩展。
@@ -1057,7 +1068,7 @@ def continue_generate_world(
     )
 
     logging.info("Generating continuation world expansion...")
-    result = invoke_with_cleaning(llm_adapter, prompt_text)
+    result = invoke_with_cleaning(llm_adapter, prompt_text, progress=progress)
     if not result.strip():
         raise RuntimeError("续写世界观扩展生成失败，LLM 返回为空。")
     return result
@@ -1079,7 +1090,8 @@ def continue_generate_characters(
     narrative_instruction: str = "",
     continuation_seed: str = "",
     world_expansion: str = "",
-    num_characters: str = "1-3"
+    num_characters: str = "1-3",
+    progress=None
 ) -> str:
     """
     续写步骤1: 生成新增角色设定。
@@ -1133,7 +1145,7 @@ def continue_generate_characters(
     )
 
     logging.info("Generating continuation characters...")
-    result = invoke_with_cleaning(llm_adapter, prompt_text)
+    result = invoke_with_cleaning(llm_adapter, prompt_text, progress=progress)
     if not result.strip():
         raise RuntimeError("续写新增角色生成失败，LLM 返回为空。")
     return result
@@ -1155,7 +1167,8 @@ def continue_generate_arcs(
     thinking_budget: int = 0,
     narrative_instruction: str = "",
     continuation_seed: str = "",
-    world_expansion: str = ""
+    world_expansion: str = "",
+    progress=None
 ) -> str:
     """
     续写步骤2: 生成新增剧情弧。
@@ -1209,7 +1222,7 @@ def continue_generate_arcs(
     )
 
     logging.info("Generating continuation arcs...")
-    result = invoke_with_cleaning(llm_adapter, prompt_text)
+    result = invoke_with_cleaning(llm_adapter, prompt_text, progress=progress)
     if not result.strip():
         raise RuntimeError("续写新增剧情弧生成失败，LLM 返回为空。")
     return result
@@ -1226,7 +1239,8 @@ def continue_generate_char_state(
     max_tokens: int = 2048,
     timeout: int = 600,
     enable_thinking: bool = False,
-    thinking_budget: int = 0
+    thinking_budget: int = 0,
+    progress=None
 ) -> str:
     """
     续写步骤3: 生成新角色初始状态。
@@ -1250,7 +1264,7 @@ def continue_generate_char_state(
     )
 
     logging.info("Generating continuation character state...")
-    result = invoke_with_cleaning(llm_adapter, prompt_text)
+    result = invoke_with_cleaning(llm_adapter, prompt_text, progress=progress)
     if not result.strip():
         raise RuntimeError("续写新角色状态生成失败，LLM 返回为空。")
     return result

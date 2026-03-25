@@ -60,6 +60,20 @@ defineProps<{ state: ReturnType<typeof useWorkshopState> }>()
           class="w-full border border-[var(--color-parchment-darker)] rounded px-3 py-2 text-sm font-mono resize-y"
           style="min-height: 180px" />
         <p v-if="state.stepSeed.value.error" class="text-xs text-red-500 mt-1">{{ state.stepSeed.value.error }}</p>
+        <!-- 修订面板 -->
+        <details v-if="state.seedText.value" class="mt-2 border border-dashed border-[var(--color-parchment-darker)] rounded-lg">
+          <summary class="px-3 py-2 cursor-pointer text-xs font-medium text-[var(--color-leather)] select-none">✏️ 基于建议修订</summary>
+          <div class="px-3 pb-3 pt-1 space-y-2">
+            <input v-model="state.revisionGuidance.value.core_seed" placeholder="输入修改建议，如：让核心冲突更激烈、增加悬念元素…" class="w-full border border-[var(--color-parchment-darker)] rounded px-2 py-1 text-sm" />
+            <div class="flex items-center gap-2">
+              <button @click="state.doRevise('core_seed')" :disabled="state.revisionState.value.core_seed.running || !state.revisionGuidance.value.core_seed || !state.llmConfig.value" class="btn-sm" type="button">
+                {{ state.revisionState.value.core_seed.running ? '修订中…' : '▶ 修订' }}
+              </button>
+              <span v-if="state.revisionState.value.core_seed.progress" class="text-xs text-[var(--color-ink-light)] italic">{{ state.revisionState.value.core_seed.progress }}</span>
+              <span v-if="state.revisionState.value.core_seed.error" class="text-xs text-red-500">{{ state.revisionState.value.core_seed.error }}</span>
+            </div>
+          </div>
+        </details>
       </div>
 
       <!-- ② 角色动力学 -->
@@ -80,6 +94,20 @@ defineProps<{ state: ReturnType<typeof useWorkshopState> }>()
           class="w-full border border-[var(--color-parchment-darker)] rounded px-3 py-2 text-sm font-mono resize-y"
           style="min-height: 180px" />
         <p v-if="state.stepChar.value.error" class="text-xs text-red-500 mt-1">{{ state.stepChar.value.error }}</p>
+        <!-- 修订面板 -->
+        <details v-if="state.charText.value" class="mt-2 border border-dashed border-[var(--color-parchment-darker)] rounded-lg">
+          <summary class="px-3 py-2 cursor-pointer text-xs font-medium text-[var(--color-leather)] select-none">✏️ 基于建议修订</summary>
+          <div class="px-3 pb-3 pt-1 space-y-2">
+            <input v-model="state.revisionGuidance.value.characters" placeholder="输入修改建议，如：让女主性格更强势、增加角色间的对立关系…" class="w-full border border-[var(--color-parchment-darker)] rounded px-2 py-1 text-sm" />
+            <div class="flex items-center gap-2">
+              <button @click="state.doRevise('characters')" :disabled="state.revisionState.value.characters.running || !state.revisionGuidance.value.characters || !state.llmConfig.value" class="btn-sm" type="button">
+                {{ state.revisionState.value.characters.running ? '修订中…' : '▶ 修订' }}
+              </button>
+              <span v-if="state.revisionState.value.characters.progress" class="text-xs text-[var(--color-ink-light)] italic">{{ state.revisionState.value.characters.progress }}</span>
+              <span v-if="state.revisionState.value.characters.error" class="text-xs text-red-500">{{ state.revisionState.value.characters.error }}</span>
+            </div>
+          </div>
+        </details>
 
         <!-- 补充角色子面板 -->
         <details v-if="state.charText.value" class="mt-2 border border-dashed border-[var(--color-parchment-darker)] rounded-lg">
@@ -132,6 +160,20 @@ defineProps<{ state: ReturnType<typeof useWorkshopState> }>()
           class="w-full border border-[var(--color-parchment-darker)] rounded px-3 py-2 text-sm font-mono resize-y"
           style="min-height: 180px" />
         <p v-if="state.stepCharState.value.error" class="text-xs text-red-500 mt-1">{{ state.stepCharState.value.error }}</p>
+        <!-- 修订面板 -->
+        <details v-if="state.charStateText.value" class="mt-2 border border-dashed border-[var(--color-parchment-darker)] rounded-lg">
+          <summary class="px-3 py-2 cursor-pointer text-xs font-medium text-[var(--color-leather)] select-none">✏️ 基于建议修订</summary>
+          <div class="px-3 pb-3 pt-1 space-y-2">
+            <input v-model="state.revisionGuidance.value.char_state" placeholder="输入修改建议，如：丰富外貌描写、增加角色初始物品…" class="w-full border border-[var(--color-parchment-darker)] rounded px-2 py-1 text-sm" />
+            <div class="flex items-center gap-2">
+              <button @click="state.doRevise('char_state')" :disabled="state.revisionState.value.char_state.running || !state.revisionGuidance.value.char_state || !state.llmConfig.value" class="btn-sm" type="button">
+                {{ state.revisionState.value.char_state.running ? '修订中…' : '▶ 修订' }}
+              </button>
+              <span v-if="state.revisionState.value.char_state.progress" class="text-xs text-[var(--color-ink-light)] italic">{{ state.revisionState.value.char_state.progress }}</span>
+              <span v-if="state.revisionState.value.char_state.error" class="text-xs text-red-500">{{ state.revisionState.value.char_state.error }}</span>
+            </div>
+          </div>
+        </details>
       </div>
 
       <!-- ④ 世界观 -->
@@ -155,6 +197,20 @@ defineProps<{ state: ReturnType<typeof useWorkshopState> }>()
           class="w-full border border-[var(--color-parchment-darker)] rounded px-3 py-2 text-sm font-mono resize-y"
           style="min-height: 180px" />
         <p v-if="state.stepWorld.value.error" class="text-xs text-red-500 mt-1">{{ state.stepWorld.value.error }}</p>
+        <!-- 修订面板 -->
+        <details v-if="state.worldText.value" class="mt-2 border border-dashed border-[var(--color-parchment-darker)] rounded-lg">
+          <summary class="px-3 py-2 cursor-pointer text-xs font-medium text-[var(--color-leather)] select-none">✏️ 基于建议修订</summary>
+          <div class="px-3 pb-3 pt-1 space-y-2">
+            <input v-model="state.revisionGuidance.value.world" placeholder="输入修改建议，如：增加更多地理细节、强化社会阶层冲突…" class="w-full border border-[var(--color-parchment-darker)] rounded px-2 py-1 text-sm" />
+            <div class="flex items-center gap-2">
+              <button @click="state.doRevise('world')" :disabled="state.revisionState.value.world.running || !state.revisionGuidance.value.world || !state.llmConfig.value" class="btn-sm" type="button">
+                {{ state.revisionState.value.world.running ? '修订中…' : '▶ 修订' }}
+              </button>
+              <span v-if="state.revisionState.value.world.progress" class="text-xs text-[var(--color-ink-light)] italic">{{ state.revisionState.value.world.progress }}</span>
+              <span v-if="state.revisionState.value.world.error" class="text-xs text-red-500">{{ state.revisionState.value.world.error }}</span>
+            </div>
+          </div>
+        </details>
       </div>
 
       <!-- ⑤ 情节架构 -->
@@ -174,6 +230,20 @@ defineProps<{ state: ReturnType<typeof useWorkshopState> }>()
           class="w-full border border-[var(--color-parchment-darker)] rounded px-3 py-2 text-sm font-mono resize-y"
           style="min-height: 180px" />
         <p v-if="state.stepPlot.value.error" class="text-xs text-red-500 mt-1">{{ state.stepPlot.value.error }}</p>
+        <!-- 修订面板 -->
+        <details v-if="state.plotText.value" class="mt-2 border border-dashed border-[var(--color-parchment-darker)] rounded-lg">
+          <summary class="px-3 py-2 cursor-pointer text-xs font-medium text-[var(--color-leather)] select-none">✏️ 基于建议修订</summary>
+          <div class="px-3 pb-3 pt-1 space-y-2">
+            <input v-model="state.revisionGuidance.value.plot" placeholder="输入修改建议，如：增加更多反转、调整第二幕节奏…" class="w-full border border-[var(--color-parchment-darker)] rounded px-2 py-1 text-sm" />
+            <div class="flex items-center gap-2">
+              <button @click="state.doRevise('plot')" :disabled="state.revisionState.value.plot.running || !state.revisionGuidance.value.plot || !state.llmConfig.value" class="btn-sm" type="button">
+                {{ state.revisionState.value.plot.running ? '修订中…' : '▶ 修订' }}
+              </button>
+              <span v-if="state.revisionState.value.plot.progress" class="text-xs text-[var(--color-ink-light)] italic">{{ state.revisionState.value.plot.progress }}</span>
+              <span v-if="state.revisionState.value.plot.error" class="text-xs text-red-500">{{ state.revisionState.value.plot.error }}</span>
+            </div>
+          </div>
+        </details>
       </div>
 
       <!-- 组装按钮（仅 stepMode） -->
@@ -284,6 +354,19 @@ defineProps<{ state: ReturnType<typeof useWorkshopState> }>()
               <p v-if="state.contStepSeed.value.error" class="text-xs text-red-600">{{ state.contStepSeed.value.error }}</p>
               <p v-if="state.contStepSeed.value.progress" class="text-xs text-[var(--color-ink-light)]">{{ state.contStepSeed.value.progress }}</p>
               <textarea v-model="state.contSeedText.value" rows="8" class="w-full border border-[var(--color-parchment-darker)] rounded p-2 text-sm" placeholder="续写方向大纲将在此显示，可手动编辑…"></textarea>
+              <details v-if="state.contSeedText.value" class="border border-dashed border-[var(--color-parchment-darker)] rounded-lg">
+                <summary class="px-3 py-2 cursor-pointer text-xs font-medium text-[var(--color-leather)] select-none">✏️ 基于建议修订</summary>
+                <div class="px-3 pb-3 pt-1 space-y-2">
+                  <input v-model="state.revisionGuidance.value.cont_seed" placeholder="输入修改建议…" class="w-full border border-[var(--color-parchment-darker)] rounded px-2 py-1 text-sm" />
+                  <div class="flex items-center gap-2">
+                    <button @click="state.doRevise('cont_seed')" :disabled="state.revisionState.value.cont_seed.running || !state.revisionGuidance.value.cont_seed || !state.llmConfig.value" class="btn-sm" type="button">
+                      {{ state.revisionState.value.cont_seed.running ? '修订中…' : '▶ 修订' }}
+                    </button>
+                    <span v-if="state.revisionState.value.cont_seed.progress" class="text-xs text-[var(--color-ink-light)] italic">{{ state.revisionState.value.cont_seed.progress }}</span>
+                    <span v-if="state.revisionState.value.cont_seed.error" class="text-xs text-red-500">{{ state.revisionState.value.cont_seed.error }}</span>
+                  </div>
+                </div>
+              </details>
             </div>
 
             <!-- C⓪.5 世界观扩展 -->
@@ -295,6 +378,19 @@ defineProps<{ state: ReturnType<typeof useWorkshopState> }>()
               <p v-if="state.contStepWorld.value.error" class="text-xs text-red-600">{{ state.contStepWorld.value.error }}</p>
               <p v-if="state.contStepWorld.value.progress" class="text-xs text-[var(--color-ink-light)]">{{ state.contStepWorld.value.progress }}</p>
               <textarea v-model="state.contWorldText.value" rows="8" class="w-full border border-[var(--color-parchment-darker)] rounded p-2 text-sm" placeholder="世界观扩展将在此显示，可手动编辑…"></textarea>
+              <details v-if="state.contWorldText.value" class="border border-dashed border-[var(--color-parchment-darker)] rounded-lg">
+                <summary class="px-3 py-2 cursor-pointer text-xs font-medium text-[var(--color-leather)] select-none">✏️ 基于建议修订</summary>
+                <div class="px-3 pb-3 pt-1 space-y-2">
+                  <input v-model="state.revisionGuidance.value.cont_world" placeholder="输入修改建议…" class="w-full border border-[var(--color-parchment-darker)] rounded px-2 py-1 text-sm" />
+                  <div class="flex items-center gap-2">
+                    <button @click="state.doRevise('cont_world')" :disabled="state.revisionState.value.cont_world.running || !state.revisionGuidance.value.cont_world || !state.llmConfig.value" class="btn-sm" type="button">
+                      {{ state.revisionState.value.cont_world.running ? '修订中…' : '▶ 修订' }}
+                    </button>
+                    <span v-if="state.revisionState.value.cont_world.progress" class="text-xs text-[var(--color-ink-light)] italic">{{ state.revisionState.value.cont_world.progress }}</span>
+                    <span v-if="state.revisionState.value.cont_world.error" class="text-xs text-red-500">{{ state.revisionState.value.cont_world.error }}</span>
+                  </div>
+                </div>
+              </details>
             </div>
 
             <!-- C① 新增角色 -->
@@ -310,6 +406,19 @@ defineProps<{ state: ReturnType<typeof useWorkshopState> }>()
               <p v-if="state.contStepChars.value.error" class="text-xs text-red-600">{{ state.contStepChars.value.error }}</p>
               <p v-if="state.contStepChars.value.progress" class="text-xs text-[var(--color-ink-light)]">{{ state.contStepChars.value.progress }}</p>
               <textarea v-model="state.contCharsText.value" rows="8" class="w-full border border-[var(--color-parchment-darker)] rounded p-2 text-sm" placeholder="新增角色设定将在此显示，可手动编辑…"></textarea>
+              <details v-if="state.contCharsText.value" class="border border-dashed border-[var(--color-parchment-darker)] rounded-lg">
+                <summary class="px-3 py-2 cursor-pointer text-xs font-medium text-[var(--color-leather)] select-none">✏️ 基于建议修订</summary>
+                <div class="px-3 pb-3 pt-1 space-y-2">
+                  <input v-model="state.revisionGuidance.value.cont_chars" placeholder="输入修改建议，如：调整角色性格、修改外貌描写…" class="w-full border border-[var(--color-parchment-darker)] rounded px-2 py-1 text-sm" />
+                  <div class="flex items-center gap-2">
+                    <button @click="state.doRevise('cont_chars')" :disabled="state.revisionState.value.cont_chars.running || !state.revisionGuidance.value.cont_chars || !state.llmConfig.value" class="btn-sm" type="button">
+                      {{ state.revisionState.value.cont_chars.running ? '修订中…' : '▶ 修订' }}
+                    </button>
+                    <span v-if="state.revisionState.value.cont_chars.progress" class="text-xs text-[var(--color-ink-light)] italic">{{ state.revisionState.value.cont_chars.progress }}</span>
+                    <span v-if="state.revisionState.value.cont_chars.error" class="text-xs text-red-500">{{ state.revisionState.value.cont_chars.error }}</span>
+                  </div>
+                </div>
+              </details>
 
               <!-- 续写补充角色子面板 -->
               <details v-if="state.contCharsText.value" class="border border-dashed border-[var(--color-parchment-darker)] rounded-lg">
@@ -353,6 +462,19 @@ defineProps<{ state: ReturnType<typeof useWorkshopState> }>()
               <p v-if="state.contStepArcs.value.error" class="text-xs text-red-600">{{ state.contStepArcs.value.error }}</p>
               <p v-if="state.contStepArcs.value.progress" class="text-xs text-[var(--color-ink-light)]">{{ state.contStepArcs.value.progress }}</p>
               <textarea v-model="state.contArcsText.value" rows="8" class="w-full border border-[var(--color-parchment-darker)] rounded p-2 text-sm" placeholder="新增剧情弧将在此显示，可手动编辑…"></textarea>
+              <details v-if="state.contArcsText.value" class="border border-dashed border-[var(--color-parchment-darker)] rounded-lg">
+                <summary class="px-3 py-2 cursor-pointer text-xs font-medium text-[var(--color-leather)] select-none">✏️ 基于建议修订</summary>
+                <div class="px-3 pb-3 pt-1 space-y-2">
+                  <input v-model="state.revisionGuidance.value.cont_arcs" placeholder="输入修改建议，如：增加更多冲突、调整剧情节奏…" class="w-full border border-[var(--color-parchment-darker)] rounded px-2 py-1 text-sm" />
+                  <div class="flex items-center gap-2">
+                    <button @click="state.doRevise('cont_arcs')" :disabled="state.revisionState.value.cont_arcs.running || !state.revisionGuidance.value.cont_arcs || !state.llmConfig.value" class="btn-sm" type="button">
+                      {{ state.revisionState.value.cont_arcs.running ? '修订中…' : '▶ 修订' }}
+                    </button>
+                    <span v-if="state.revisionState.value.cont_arcs.progress" class="text-xs text-[var(--color-ink-light)] italic">{{ state.revisionState.value.cont_arcs.progress }}</span>
+                    <span v-if="state.revisionState.value.cont_arcs.error" class="text-xs text-red-500">{{ state.revisionState.value.cont_arcs.error }}</span>
+                  </div>
+                </div>
+              </details>
             </div>
 
             <!-- C③ 新角色状态 -->
@@ -364,6 +486,19 @@ defineProps<{ state: ReturnType<typeof useWorkshopState> }>()
               <p v-if="state.contStepCharState.value.error" class="text-xs text-red-600">{{ state.contStepCharState.value.error }}</p>
               <p v-if="state.contStepCharState.value.progress" class="text-xs text-[var(--color-ink-light)]">{{ state.contStepCharState.value.progress }}</p>
               <textarea v-model="state.contCharStateText.value" rows="8" class="w-full border border-[var(--color-parchment-darker)] rounded p-2 text-sm" placeholder="新角色状态将在此显示，可手动编辑…"></textarea>
+              <details v-if="state.contCharStateText.value" class="border border-dashed border-[var(--color-parchment-darker)] rounded-lg">
+                <summary class="px-3 py-2 cursor-pointer text-xs font-medium text-[var(--color-leather)] select-none">✏️ 基于建议修订</summary>
+                <div class="px-3 pb-3 pt-1 space-y-2">
+                  <input v-model="state.revisionGuidance.value.cont_char_state" placeholder="输入修改建议，如：丰富外貌描写、调整角色初始状态…" class="w-full border border-[var(--color-parchment-darker)] rounded px-2 py-1 text-sm" />
+                  <div class="flex items-center gap-2">
+                    <button @click="state.doRevise('cont_char_state')" :disabled="state.revisionState.value.cont_char_state.running || !state.revisionGuidance.value.cont_char_state || !state.llmConfig.value" class="btn-sm" type="button">
+                      {{ state.revisionState.value.cont_char_state.running ? '修订中…' : '▶ 修订' }}
+                    </button>
+                    <span v-if="state.revisionState.value.cont_char_state.progress" class="text-xs text-[var(--color-ink-light)] italic">{{ state.revisionState.value.cont_char_state.progress }}</span>
+                    <span v-if="state.revisionState.value.cont_char_state.error" class="text-xs text-red-500">{{ state.revisionState.value.cont_char_state.error }}</span>
+                  </div>
+                </div>
+              </details>
             </div>
 
             <!-- 追加按钮 -->

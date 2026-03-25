@@ -13,6 +13,7 @@ const navLinks = [
   { to: '/styles', label: '文风与DNA', icon: '🎨' },
   { to: '/knowledge', label: '知识库', icon: '📚' },
   { to: '/consistency', label: '一致性检查', icon: '🔍' },
+  { to: '/brainstorm', label: '创意讨论', icon: '💡' },
   { to: '/files', label: '文件管理', icon: '📁' },
   { to: '/logs', label: '运行日志', icon: '📜' },
   { to: '/reader', label: '小说阅读', icon: '📖' },

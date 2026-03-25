@@ -22,7 +22,8 @@ from novel_generator.architecture import (
     Novel_architecture_generate, continue_novel_architecture,
     generate_core_seed, generate_character_dynamics,
     generate_character_dynamics_only, generate_character_state_only, supplement_characters,
-    read_core_seed, read_world_building,
+    read_core_seed, read_character_dynamics, read_world_building,
+    read_plot_architecture, read_character_state,
     generate_world_building, generate_plot_architecture,
     assemble_architecture, load_partial_architecture_data,
     continue_generate_seed, continue_generate_world,
@@ -215,7 +216,8 @@ class NovelGeneratorWeb:
         }
 
     def save_llm_config(self, config_name, api_key, base_url, interface_format,
-                       model_name, temperature, max_tokens, timeout, enable_thinking, thinking_budget):
+                       model_name, temperature, max_tokens, timeout, enable_thinking, thinking_budget,
+                       enable_streaming=True):
         """保存 LLM 配置"""
         try:
             if "llm_configs" not in self.config:
@@ -230,7 +232,8 @@ class NovelGeneratorWeb:
                 "max_tokens": max_tokens,
                 "timeout": timeout,
                 "enable_thinking": enable_thinking,
-                "thinking_budget": int(thinking_budget) if thinking_budget else 0
+                "thinking_budget": int(thinking_budget) if thinking_budget else 0,
+                "enable_streaming": bool(enable_streaming),
             }
 
             save_config(self.config, self.config_file)
@@ -323,7 +326,8 @@ class NovelGeneratorWeb:
                 enable_thinking=llm_conf.get("enable_thinking", False),
                 num_characters=num_characters,
                 thinking_budget=llm_conf.get("thinking_budget", 0),
-                narrative_instruction=narrative_for_arch
+                narrative_instruction=narrative_for_arch,
+                progress=progress
             )
 
             progress(1.0, desc="生成完成!")
@@ -369,7 +373,8 @@ class NovelGeneratorWeb:
                 temperature=llm_conf["temperature"],
                 max_tokens=llm_conf["max_tokens"],
                 timeout=llm_conf["timeout"],
-                narrative_instruction=narrative_for_bp
+                narrative_instruction=narrative_for_bp,
+                progress=progress
             )
 
             progress(1.0, desc="生成完成!")
@@ -450,6 +455,8 @@ class NovelGeneratorWeb:
                     inject_world_building=inject_world_building,
                     author_style_name=style_name if style_name else "",
                     styles_dir=self.get_styles_dir(),
+                    progress=progress,
+                    enable_streaming=llm_conf.get("enable_streaming", True),
                 )
             finally:
                 logging.getLogger().removeHandler(vs_handler)
@@ -573,7 +580,8 @@ class NovelGeneratorWeb:
                 timeout=llm_conf["timeout"],
                 writing_style=writing_style,
                 narrative_instruction=narrative_for_ch,
-                polish_guidance=polish_guidance
+                polish_guidance=polish_guidance,
+                progress=progress
             )
 
             # 保存扩写结果
@@ -586,6 +594,204 @@ class NovelGeneratorWeb:
         except Exception as e:
             logging.error(f"场景扩写失败: {str(e)}")
             return f"❌ 场景扩写失败: {str(e)}"
+
+    def humanize_chapter_web(self, llm_config_name, filepath, chapter_num,
+                             enable_r8=False, user_focus="", depth="standard",
+                             progress=gr.Progress()):
+        """去 AI 痕迹处理（不自动保存，返回 JSON 供前端对比预览）"""
+        import json as _json
+        from novel_generator.humanizer import humanize_chapter
+        try:
+            progress(0, desc=f"准备对第 {chapter_num} 章去 AI 痕迹...")
+
+            if not llm_config_name or llm_config_name not in self.config.get("llm_configs", {}):
+                return "❌ 请先选择有效的 LLM 配置"
+
+            llm_conf = self.config["llm_configs"][llm_config_name]
+
+            # 读取章节原文
+            chapters_dir = os.path.join(filepath, "chapters")
+            chapter_file = os.path.join(chapters_dir, f"chapter_{int(chapter_num)}.txt")
+            if not os.path.exists(chapter_file):
+                return f"❌ 未找到第 {int(chapter_num)} 章文件"
+            chapter_text = read_file(chapter_file).strip()
+            if not chapter_text:
+                return f"❌ 第 {int(chapter_num)} 章内容为空"
+
+            # 读取前后章衔接段（各200字）
+            prev_tail = ""
+            next_head = ""
+            prev_file = os.path.join(chapters_dir, f"chapter_{int(chapter_num) - 1}.txt")
+            next_file = os.path.join(chapters_dir, f"chapter_{int(chapter_num) + 1}.txt")
+            if os.path.exists(prev_file):
+                prev_text = read_file(prev_file).strip()
+                prev_tail = prev_text[-200:] if len(prev_text) > 200 else prev_text
+            if os.path.exists(next_file):
+                next_text = read_file(next_file).strip()
+                next_head = next_text[:200] if len(next_text) > 200 else next_text
+
+            # R8 副文本：大纲和角色状态
+            outline_context = ""
+            character_context = ""
+            if enable_r8:
+                dir_file = os.path.join(filepath, "Novel_directory.txt")
+                if os.path.exists(dir_file):
+                    from chapter_directory_parser import get_chapter_info_from_blueprint
+                    blueprint_text = read_file(dir_file)
+                    ch_info = get_chapter_info_from_blueprint(blueprint_text, int(chapter_num))
+                    outline_context = "\n".join(f"{k}: {v}" for k, v in ch_info.items() if v)
+                char_state_file = os.path.join(filepath, "character_state.txt")
+                if os.path.exists(char_state_file):
+                    character_context = read_file(char_state_file).strip()
+
+            progress(0.3, desc="去 AI 痕迹处理中...")
+
+            result = humanize_chapter(
+                chapter_text=chapter_text,
+                enable_r8=enable_r8,
+                depth=depth,
+                outline_context=outline_context,
+                character_context=character_context,
+                user_focus=user_focus,
+                prev_tail=prev_tail,
+                next_head=next_head,
+                api_key=llm_conf["api_key"],
+                base_url=llm_conf["base_url"],
+                model_name=llm_conf["model_name"],
+                temperature=llm_conf["temperature"],
+                interface_format=llm_conf["interface_format"],
+                max_tokens=llm_conf["max_tokens"],
+                timeout=llm_conf["timeout"],
+                progress=progress,
+            )
+
+            # 从结果中分离修改后文本和修改清单
+            # LLM 可能用多种分隔线格式：---、\n---\n、\n\n---\n\n 等
+            import re as _re
+            split_match = _re.split(r'\n-{3,}\n', result, maxsplit=1)
+            if len(split_match) == 2:
+                humanized_text = split_match[0].strip()
+                changes_text = split_match[1].strip()
+            elif '## 修改清单' in result:
+                # 回退：用"## 修改清单"作为分隔
+                idx = result.index('## 修改清单')
+                humanized_text = result[:idx].strip()
+                changes_text = result[idx:].strip()
+            else:
+                humanized_text = result.strip()
+                changes_text = ""
+                logging.warning("[Humanizer] 未能从结果中分离修改后文本和修改清单")
+
+            progress(1.0, desc="去 AI 痕迹完成! 请对比后确认保留哪个版本。")
+
+            # 返回 JSON，不自动保存，由前端对比后决定
+            return _json.dumps({
+                "original": chapter_text,
+                "humanized": humanized_text,
+                "changes": changes_text,
+                "chapter_num": int(chapter_num),
+            }, ensure_ascii=False)
+
+        except Exception as e:
+            logging.error(f"去 AI 痕迹失败: {str(e)}")
+            return f"❌ 去 AI 痕迹失败: {str(e)}"
+
+    def batch_humanize_web(self, llm_config_name, filepath,
+                           start_chapter, end_chapter,
+                           enable_r8=False, user_focus="", depth="standard",
+                           progress=gr.Progress()):
+        """批量去 AI 痕迹"""
+        from novel_generator.humanizer import humanize_chapter
+        try:
+            if not llm_config_name or llm_config_name not in self.config.get("llm_configs", {}):
+                return "❌ 请先选择有效的 LLM 配置"
+
+            llm_conf = self.config["llm_configs"][llm_config_name]
+            chapters_dir = os.path.join(filepath, "chapters")
+            results = []
+            total = end_chapter - start_chapter + 1
+
+            for i, ch_num in enumerate(range(start_chapter, end_chapter + 1)):
+                chapter_file = os.path.join(chapters_dir, f"chapter_{ch_num}.txt")
+                if not os.path.exists(chapter_file):
+                    results.append(f"第 {ch_num} 章：跳过（文件不存在）")
+                    continue
+
+                chapter_text = read_file(chapter_file).strip()
+                if not chapter_text:
+                    results.append(f"第 {ch_num} 章：跳过（内容为空）")
+                    continue
+
+                # 备份原文
+                backup_file = os.path.join(chapters_dir, f"chapter_{ch_num}_pre_humanize.txt")
+                save_string_to_txt(chapter_text, backup_file)
+
+                progress((i + 0.5) / total, desc=f"处理第 {ch_num} 章 ({i+1}/{total})...")
+
+                # 前后章衔接
+                prev_tail = ""
+                next_head = ""
+                prev_file = os.path.join(chapters_dir, f"chapter_{ch_num - 1}.txt")
+                next_file = os.path.join(chapters_dir, f"chapter_{ch_num + 1}.txt")
+                if os.path.exists(prev_file):
+                    prev_text = read_file(prev_file).strip()
+                    prev_tail = prev_text[-200:] if len(prev_text) > 200 else prev_text
+                if os.path.exists(next_file):
+                    next_text = read_file(next_file).strip()
+                    next_head = next_text[:200] if len(next_text) > 200 else next_text
+
+                # R8 副文本
+                outline_context = ""
+                character_context = ""
+                if enable_r8:
+                    dir_file = os.path.join(filepath, "Novel_directory.txt")
+                    if os.path.exists(dir_file):
+                        from chapter_directory_parser import get_chapter_info_from_blueprint
+                        blueprint_text = read_file(dir_file)
+                        ch_info = get_chapter_info_from_blueprint(blueprint_text, ch_num)
+                        outline_context = "\n".join(f"{k}: {v}" for k, v in ch_info.items() if v)
+                    char_state_file = os.path.join(filepath, "character_state.txt")
+                    if os.path.exists(char_state_file):
+                        character_context = read_file(char_state_file).strip()
+
+                result = humanize_chapter(
+                    chapter_text=chapter_text,
+                    enable_r8=enable_r8,
+                    depth=depth,
+                    outline_context=outline_context,
+                    character_context=character_context,
+                    user_focus=user_focus,
+                    prev_tail=prev_tail,
+                    next_head=next_head,
+                    api_key=llm_conf["api_key"],
+                    base_url=llm_conf["base_url"],
+                    model_name=llm_conf["model_name"],
+                    temperature=llm_conf["temperature"],
+                    interface_format=llm_conf["interface_format"],
+                    max_tokens=llm_conf["max_tokens"],
+                    timeout=llm_conf["timeout"],
+                    progress=progress,
+                )
+
+                # 保存修改后文本
+                separator = "\n---\n"
+                if separator in result:
+                    cleaned_text = result.split(separator)[0].strip()
+                else:
+                    cleaned_text = result.strip()
+                save_string_to_txt(cleaned_text, chapter_file)
+
+                # 统计改动
+                change_count = result.count("| R")
+                results.append(f"第 {ch_num} 章：完成（{change_count} 处改动）")
+
+            progress(1.0, desc="批量去 AI 痕迹完成!")
+            summary = "\n".join(results)
+            return f"✅ 批量去 AI 痕迹完成!\n\n{summary}"
+
+        except Exception as e:
+            logging.error(f"批量去 AI 痕迹失败: {str(e)}")
+            return f"❌ 批量去 AI 痕迹失败: {str(e)}"
 
     def batch_generate_all(self, llm_config_name, emb_config_name, filepath,
                            word_number, user_guidance, style_name,
@@ -673,6 +879,210 @@ class NovelGeneratorWeb:
         except Exception as e:
             logging.error(f"[Batch] 批量生成异常: {str(e)}", exc_info=True)
             return f"❌ 批量生成失败: {str(e)}"
+
+    def revise_step_content(self, llm_config_name, original_content,
+                            revision_guidance, step_type="",
+                            progress=gr.Progress()):
+        """基于已有内容 + 修改建议，让 LLM 修订内容"""
+        try:
+            progress(0.1, desc="准备修订...")
+
+            if not llm_config_name or llm_config_name not in self.config.get("llm_configs", {}):
+                return "❌ 请先选择有效的 LLM 配置"
+            if not original_content.strip():
+                return "❌ 没有可修订的内容"
+            if not revision_guidance.strip():
+                return "❌ 请输入修改建议"
+
+            llm_conf = self.config["llm_configs"][llm_config_name]
+
+            step_labels = {
+                "core_seed": "核心种子",
+                "characters": "角色动力学",
+                "char_state": "角色状态",
+                "world": "世界观设定",
+                "plot": "情节架构",
+            }
+            step_label = step_labels.get(step_type, "创作内容")
+
+            prompt = f"""以下是当前的【{step_label}】内容：
+
+--- 当前内容 ---
+{original_content}
+--- 当前内容结束 ---
+
+用户对以上内容提出了以下修改要求：
+{revision_guidance}
+
+请基于当前内容进行修订，满足用户的修改要求。注意：
+1. 只修改用户要求修改的部分，保留用户未提及的内容不变
+2. 保持原有的格式和结构
+3. 修改后的内容应与整体设定保持一致
+
+仅返回修订后的完整{step_label}文本，不要解释修改了什么。"""
+
+            progress(0.2, desc="正在修订...")
+
+            from novel_generator.common import invoke_with_cleaning
+            llm_adapter = create_llm_adapter(
+                interface_format=llm_conf["interface_format"],
+                base_url=llm_conf["base_url"],
+                model_name=llm_conf["model_name"],
+                api_key=llm_conf["api_key"],
+                temperature=llm_conf["temperature"],
+                max_tokens=llm_conf["max_tokens"],
+                timeout=llm_conf["timeout"],
+                enable_thinking=llm_conf.get("enable_thinking", False),
+                thinking_budget=llm_conf.get("thinking_budget", 0),
+            )
+
+            result = invoke_with_cleaning(llm_adapter, prompt, progress=progress)
+
+            progress(1.0, desc="修订完成")
+            return result
+
+        except Exception as e:
+            logging.error(f"修订失败: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return f"❌ 修订失败: {str(e)}"
+
+    def brainstorm_chat(self, llm_config_name, filepath, messages,
+                        inc_seed, inc_chars, inc_world, inc_plot,
+                        inc_bp, inc_state, extra_context,
+                        progress=gr.Progress()):
+        """创意讨论：多轮对话头脑风暴"""
+        import uuid
+        import time
+        from novel_generator.common import _append_prompt_history
+
+        try:
+            progress(0.1, desc="正在加载项目上下文...")
+
+            if not llm_config_name or llm_config_name not in self.config.get("llm_configs", {}):
+                return "❌ 请先选择有效的 LLM 配置"
+
+            llm_conf = self.config["llm_configs"][llm_config_name]
+
+            # 收集项目上下文
+            context_parts = []
+            if inc_seed:
+                text = read_core_seed(filepath)
+                if text:
+                    context_parts.append(f"【核心种子】\n{text}")
+            if inc_chars:
+                text = read_character_dynamics(filepath)
+                if text:
+                    context_parts.append(f"【角色动力学】\n{text}")
+            if inc_world:
+                text = read_world_building(filepath)
+                if text:
+                    context_parts.append(f"【世界观设定】\n{text}")
+            if inc_plot:
+                text = read_plot_architecture(filepath)
+                if text:
+                    context_parts.append(f"【剧情架构】\n{text}")
+            if inc_bp:
+                bp_file = os.path.join(filepath, "chapter_blueprint.txt")
+                if os.path.exists(bp_file):
+                    text = read_file(bp_file)
+                    if text:
+                        context_parts.append(f"【章节蓝图】\n{text}")
+            if inc_state:
+                text = read_character_state(filepath)
+                if text:
+                    context_parts.append(f"【角色状态】\n{text}")
+
+            # 从当前激活的预设方案读取创意讨论系统提示
+            preset_name = prompt_definitions.get_active_preset_name()
+            system_message = prompt_definitions.get_all_prompts().get(
+                "brainstorm_system_prompt",
+                "你是一位资深的小说创作顾问和头脑风暴伙伴。请与用户进行深入的创意讨论。"
+            )
+
+            if context_parts:
+                system_message += "\n\n--- 小说项目资料 ---\n\n" + "\n\n".join(context_parts)
+            if extra_context:
+                system_message += f"\n\n--- 用户补充资料 ---\n{extra_context}"
+
+            progress(0.2, desc="正在思考...")
+
+            # 创建 LLM 适配器
+            llm_adapter = create_llm_adapter(
+                interface_format=llm_conf["interface_format"],
+                base_url=llm_conf["base_url"],
+                model_name=llm_conf["model_name"],
+                api_key=llm_conf["api_key"],
+                temperature=llm_conf["temperature"],
+                max_tokens=llm_conf["max_tokens"],
+                timeout=llm_conf["timeout"],
+                enable_thinking=llm_conf.get("enable_thinking", False),
+                thinking_budget=llm_conf.get("thinking_budget", 0),
+            )
+
+            # 构建多轮对话消息列表
+            api_messages = [{"role": "system", "content": system_message}]
+            api_messages.extend(messages)
+
+            # 构造用于日志记录的 prompt 文本（包含完整对话上下文）
+            user_turns = [m for m in messages if m["role"] == "user"]
+            last_user_msg = user_turns[-1]["content"] if user_turns else ""
+
+            log_prompt = f"[创意讨论] 预设: {preset_name} | 对话轮次: {len(user_turns)}\n\n"
+            log_prompt += f"=== 系统提示 ===\n{system_message}\n\n"
+            if len(user_turns) > 1:
+                log_prompt += f"=== 历史对话 ({len(messages)}条消息) ===\n"
+                for m in messages[:-1]:
+                    role_label = "用户" if m["role"] == "user" else "AI"
+                    log_prompt += f"[{role_label}]: {m['content'][:200]}{'...' if len(m['content']) > 200 else ''}\n"
+                log_prompt += "\n"
+            log_prompt += f"=== 最新用户消息 ===\n{last_user_msg}"
+
+            model_name = llm_conf.get("model_name", "")
+            call_id = uuid.uuid4().hex[:12]
+            _append_prompt_history(log_prompt, "", model=str(model_name),
+                                   call_id=call_id, status="pending")
+
+            # 流式生成
+            attempt_start = time.time()
+            collected = []
+            try:
+                for chunk in llm_adapter.invoke_chat_stream(api_messages):
+                    collected.append(chunk)
+                    progress(0.5, desc="正在回复...", content="".join(collected))
+            except Exception as stream_err:
+                elapsed = time.time() - attempt_start
+                partial = "".join(collected)
+                err_type = type(stream_err).__name__
+                if partial.strip():
+                    _append_prompt_history(log_prompt, f"[PARTIAL:{len(partial)}字] {partial[:500]}...",
+                                           model=str(model_name), call_id=call_id,
+                                           status="partial", elapsed=elapsed)
+                    return partial + f"\n\n⚠️ 【生成中断】LLM 输出在 {elapsed:.0f}s 后中断（{err_type}）"
+                else:
+                    _append_prompt_history(log_prompt, f"[ERROR] {err_type}: {str(stream_err)}",
+                                           model=str(model_name), call_id=call_id,
+                                           status="error", elapsed=elapsed)
+                    raise stream_err
+
+            elapsed = time.time() - attempt_start
+            result = "".join(collected)
+
+            # 记录完成日志
+            reasoning = getattr(llm_adapter, 'last_reasoning', '') or ''
+            _append_prompt_history(log_prompt, result, model=str(model_name),
+                                   reasoning=reasoning, call_id=call_id,
+                                   status="done", elapsed=elapsed)
+
+            logging.info(f"[brainstorm] 创意讨论完成, 耗时={elapsed:.1f}s, 回复字符数={len(result)}")
+            progress(1.0, desc="回复完成")
+            return result
+
+        except Exception as e:
+            logging.error(f"创意讨论失败: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return f"❌ 创意讨论失败: {str(e)}"
 
     def check_consistency_web(self, llm_config_name, filepath, chapter_num,
                              progress=gr.Progress()):
@@ -1011,7 +1421,8 @@ class NovelGeneratorWeb:
                 max_tokens=llm_conf["max_tokens"],
                 timeout=llm_conf["timeout"],
                 enable_thinking=llm_conf.get("enable_thinking", False),
-                thinking_budget=llm_conf.get("thinking_budget", 0)
+                thinking_budget=llm_conf.get("thinking_budget", 0),
+                progress=progress
             )
             progress(1.0, desc="核心种子生成完成!")
             return result
@@ -1038,7 +1449,8 @@ class NovelGeneratorWeb:
                 max_tokens=llm_conf["max_tokens"],
                 timeout=llm_conf["timeout"],
                 enable_thinking=llm_conf.get("enable_thinking", False),
-                thinking_budget=llm_conf.get("thinking_budget", 0)
+                thinking_budget=llm_conf.get("thinking_budget", 0),
+                progress=progress
             )
             progress(1.0, desc="角色动力学生成完成!")
             return char_dynamics, char_state
@@ -1068,7 +1480,8 @@ class NovelGeneratorWeb:
                 timeout=llm_conf["timeout"],
                 enable_thinking=llm_conf.get("enable_thinking", False),
                 thinking_budget=llm_conf.get("thinking_budget", 0),
-                num_characters=num_characters
+                num_characters=num_characters,
+                progress=progress
             )
             progress(1.0, desc="角色动力学生成完成!")
             return result
@@ -1126,7 +1539,8 @@ class NovelGeneratorWeb:
                 max_tokens=llm_conf["max_tokens"],
                 timeout=llm_conf["timeout"],
                 enable_thinking=llm_conf.get("enable_thinking", False),
-                thinking_budget=llm_conf.get("thinking_budget", 0)
+                thinking_budget=llm_conf.get("thinking_budget", 0),
+                progress=progress
             )
             progress(1.0, desc="角色状态生成完成!")
             return result
@@ -1156,7 +1570,8 @@ class NovelGeneratorWeb:
                 max_tokens=llm_conf["max_tokens"],
                 timeout=llm_conf["timeout"],
                 enable_thinking=llm_conf.get("enable_thinking", False),
-                thinking_budget=llm_conf.get("thinking_budget", 0)
+                thinking_budget=llm_conf.get("thinking_budget", 0),
+                progress=progress
             )
             progress(1.0, desc="世界观生成完成!")
             return result
@@ -1189,7 +1604,8 @@ class NovelGeneratorWeb:
                 timeout=llm_conf["timeout"],
                 enable_thinking=llm_conf.get("enable_thinking", False),
                 thinking_budget=llm_conf.get("thinking_budget", 0),
-                narrative_instruction=narrative_instr.get("for_architecture", "")
+                narrative_instruction=narrative_instr.get("for_architecture", ""),
+                progress=progress
             )
             progress(1.0, desc="情节架构生成完成!")
             return result
@@ -1447,7 +1863,8 @@ class NovelGeneratorWeb:
                 enable_thinking=llm_conf.get("enable_thinking", False),
                 thinking_budget=llm_conf.get("thinking_budget", 0),
                 narrative_instruction=narrative_for_arch,
-                num_characters=num_characters
+                num_characters=num_characters,
+                progress=progress
             )
 
             progress(1.0, desc="生成完成!")
@@ -1558,7 +1975,8 @@ class NovelGeneratorWeb:
                 timeout=llm_conf["timeout"],
                 enable_thinking=llm_conf.get("enable_thinking", False),
                 thinking_budget=llm_conf.get("thinking_budget", 0),
-                narrative_instruction=narrative_instr.get("for_architecture", "")
+                narrative_instruction=narrative_instr.get("for_architecture", ""),
+                progress=progress
             )
             return result
         except Exception as e:
@@ -1596,7 +2014,8 @@ class NovelGeneratorWeb:
                 timeout=llm_conf["timeout"],
                 enable_thinking=llm_conf.get("enable_thinking", False),
                 thinking_budget=llm_conf.get("thinking_budget", 0),
-                narrative_instruction=narrative_instr.get("for_architecture", "")
+                narrative_instruction=narrative_instr.get("for_architecture", ""),
+                progress=progress
             )
             return result
         except Exception as e:
@@ -1641,7 +2060,8 @@ class NovelGeneratorWeb:
                 narrative_instruction=narrative_instr.get("for_architecture", ""),
                 continuation_seed=continuation_seed,
                 world_expansion=world_expansion,
-                num_characters=num_characters
+                num_characters=num_characters,
+                progress=progress
             )
             return result
         except Exception as e:
@@ -1681,7 +2101,8 @@ class NovelGeneratorWeb:
                 thinking_budget=llm_conf.get("thinking_budget", 0),
                 narrative_instruction=narrative_instr.get("for_architecture", ""),
                 continuation_seed=continuation_seed,
-                world_expansion=world_expansion
+                world_expansion=world_expansion,
+                progress=progress
             )
             return result
         except Exception as e:
@@ -1708,7 +2129,8 @@ class NovelGeneratorWeb:
                 max_tokens=llm_conf["max_tokens"],
                 timeout=llm_conf["timeout"],
                 enable_thinking=llm_conf.get("enable_thinking", False),
-                thinking_budget=llm_conf.get("thinking_budget", 0)
+                thinking_budget=llm_conf.get("thinking_budget", 0),
+                progress=progress
             )
             return result
         except Exception as e:
@@ -2652,6 +3074,7 @@ class NovelGeneratorWeb:
     _PROJECT_CONFIG_DEFAULTS = {
         "topic": "", "genre": "玄幻", "num_chapters": 10, "word_number": 3000,
         "user_guidance": "", "xp_type": "",
+        "xp_selected_presets": [],
         "llm_config_name": "", "emb_config_name": "",
         "arch_style": "", "bp_style": "", "ch_style": "", "ch_narrative_style": "",
         "expand_style": "", "expand_narrative_style": "",
@@ -2805,7 +3228,8 @@ class NovelGeneratorWeb:
                              continue_guidance="",
                              step_seed_text="", step_char_text="", step_char_state_text="",
                              step_world_text="", step_plot_text="",
-                             cont_step_chars_text="", cont_step_arcs_text="", cont_step_char_state_text=""):
+                             cont_step_chars_text="", cont_step_arcs_text="", cont_step_char_state_text="",
+                             xp_selected_presets=None):
         """将当前 UI 参数保存到活跃项目（projects.json 基础字段 + project_config.json 完整配置）"""
         active = self.get_active_project_name()
         if not active or active not in self.projects_data.get("projects", {}):
@@ -2853,6 +3277,7 @@ class NovelGeneratorWeb:
             "cont_step_chars_text": cont_step_chars_text or "",
             "cont_step_arcs_text": cont_step_arcs_text or "",
             "cont_step_char_state_text": cont_step_char_state_text or "",
+            "xp_selected_presets": xp_selected_presets if xp_selected_presets is not None else [],
         })
         return f"✅ 项目「{active}」参数已保存"
 

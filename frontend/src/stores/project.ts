@@ -11,6 +11,7 @@ export interface Project {
   word_number: number
   user_guidance: string
   xp_type: string
+  xp_selected_presets?: string[]
   // 持久化到 project_config.json 的扩展字段
   llm_config_name?: string
   emb_config_name?: string

@@ -59,7 +59,8 @@ def Chapter_blueprint_generate(
     temperature: float = 0.7,
     max_tokens: int = 4096,
     timeout: int = 600,
-    narrative_instruction: str = ""
+    narrative_instruction: str = "",
+    progress=None
 ) -> None:
     """
     若 Novel_directory.txt 已存在且内容非空，则表示可能是之前的部分生成结果；
@@ -116,7 +117,7 @@ def Chapter_blueprint_generate(
             if narrative_instruction:
                 chunk_prompt = f"\n【叙事风格指导-蓝图层】\n{narrative_instruction}\n\n" + chunk_prompt
             logging.info(f"Generating chapters [{current_start}..{current_end}] in a chunk...")
-            chunk_result = invoke_with_cleaning(llm_adapter, chunk_prompt)
+            chunk_result = invoke_with_cleaning(llm_adapter, chunk_prompt, progress=progress)
             if not chunk_result.strip():
                 logging.warning(f"Chunk generation for chapters [{current_start}..{current_end}] is empty.")
                 clear_file_content(filename_dir)
@@ -138,7 +139,7 @@ def Chapter_blueprint_generate(
         )
         if narrative_instruction:
             prompt = f"\n【叙事风格指导-蓝图层】\n{narrative_instruction}\n\n" + prompt
-        blueprint_text = invoke_with_cleaning(llm_adapter, prompt)
+        blueprint_text = invoke_with_cleaning(llm_adapter, prompt, progress=progress)
         if not blueprint_text.strip():
             logging.warning("Chapter blueprint generation result is empty.")
             return
@@ -165,7 +166,7 @@ def Chapter_blueprint_generate(
         if narrative_instruction:
             chunk_prompt = f"\n【叙事风格指导-蓝图层】\n{narrative_instruction}\n\n" + chunk_prompt
         logging.info(f"Generating chapters [{current_start}..{current_end}] in a chunk...")
-        chunk_result = invoke_with_cleaning(llm_adapter, chunk_prompt)
+        chunk_result = invoke_with_cleaning(llm_adapter, chunk_prompt, progress=progress)
         if not chunk_result.strip():
             logging.warning(f"Chunk generation for chapters [{current_start}..{current_end}] is empty.")
             clear_file_content(filename_dir)

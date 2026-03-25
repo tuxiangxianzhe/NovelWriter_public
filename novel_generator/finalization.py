@@ -366,7 +366,8 @@ def expand_scenes(
     timeout: int = 600,
     writing_style: str = "",
     narrative_instruction: str = "",
-    polish_guidance: str = ""
+    polish_guidance: str = "",
+    progress=None
 ) -> str:
     """
     对章节文本中的关键场景（尤其是亲密/性场景）进行扩写细化。
@@ -390,7 +391,7 @@ def expand_scenes(
         prompt = f"【文风要求】\n{writing_style}\n\n{prompt}"
     if narrative_instruction:
         prompt = f"\n【叙事风格指导-章节层】\n{narrative_instruction}\n\n" + prompt
-    expanded_text = invoke_with_cleaning(llm_adapter, prompt)
+    expanded_text = invoke_with_cleaning(llm_adapter, prompt, progress=progress)
     return expanded_text if expanded_text else chapter_text
 
 def enrich_chapter_text(
@@ -402,7 +403,8 @@ def enrich_chapter_text(
     temperature: float,
     interface_format: str,
     max_tokens: int,
-    timeout: int=600
+    timeout: int=600,
+    progress=None
 ) -> str:
     """
     对章节文本进行扩写，使其更接近 word_number 字数，保持剧情连贯。
@@ -420,5 +422,5 @@ def enrich_chapter_text(
 原内容：
 {chapter_text}
 """
-    enriched_text = invoke_with_cleaning(llm_adapter, prompt)
+    enriched_text = invoke_with_cleaning(llm_adapter, prompt, progress=progress)
     return enriched_text if enriched_text else chapter_text

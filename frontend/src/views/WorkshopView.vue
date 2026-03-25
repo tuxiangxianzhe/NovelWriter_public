@@ -7,6 +7,7 @@ import ChapterStep from '@/components/workshop/ChapterStep.vue'
 import BatchGenerate from '@/components/workshop/BatchGenerate.vue'
 import FinalizeStep from '@/components/workshop/FinalizeStep.vue'
 import ExpandStep from '@/components/workshop/ExpandStep.vue'
+import HumanizerStep from '@/components/workshop/HumanizerStep.vue'
 import '@/styles/workshop.css'
 
 const state = useWorkshopState()
@@ -41,5 +42,6 @@ const state = useWorkshopState()
     <BatchGenerate :state="state" />
     <FinalizeStep :state="state" />
     <ExpandStep :state="state" />
+    <HumanizerStep :state="state" />
   </div>
 </template>

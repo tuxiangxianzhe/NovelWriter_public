@@ -16,7 +16,8 @@ from api.schemas import (
     GenerateBlueprintRequest, GenerateChapterRequest,
     FinalizeChapterRequest, ExpandScenesRequest, SaveChapterRequest,
     SaveContentRequest, GenerateCharStateRequest, BatchGenerateRequest,
-    SupplementCharactersRequest,
+    SupplementCharactersRequest, HumanizerRequest, BatchHumanizerRequest,
+    ReviseStepRequest,
 )
 from pydantic import BaseModel as _BaseModel
 from api.app_state import get_web_app
@@ -165,6 +166,24 @@ def generate_step_plot(body: GenerateArchStepRequest):
             body.llm_config_name, body.seed_text, body.char_text, body.world_text,
             body.step_guidance, body.global_guidance, body.num_chapters,
             body.arch_style_name, body.xp_type,
+        ):
+            yield chunk
+
+    return _sse_response(_gen())
+
+
+# ── 修订步骤内容 ──────────────────────────────────────────────────────────────
+
+@router.post("/generate/architecture/step/revise")
+def revise_step_content(body: ReviseStepRequest):
+    """基于已有内容 + 修改建议，让 LLM 修订内容"""
+    app = get_web_app()
+
+    async def _gen():
+        async for chunk in run_with_sse(
+            app.revise_step_content,
+            body.llm_config_name, body.original_content,
+            body.revision_guidance, body.step_type,
         ):
             yield chunk
 
@@ -495,6 +514,39 @@ def expand_scenes(body: ExpandScenesRequest):
     return _sse_response(_gen())
 
 
+# ── 去 AI 痕迹 ──────────────────────────────────────────────────────────────
+
+@router.post("/generate/humanize")
+def humanize_chapter(body: HumanizerRequest):
+    app = get_web_app()
+
+    async def _gen():
+        async for chunk in run_with_sse(
+            app.humanize_chapter_web,
+            body.llm_config_name, body.filepath, body.chapter_num,
+            body.enable_r8, body.user_focus, body.depth,
+        ):
+            yield chunk
+
+    return _sse_response(_gen())
+
+
+@router.post("/generate/humanize/batch")
+def batch_humanize(body: BatchHumanizerRequest):
+    app = get_web_app()
+
+    async def _gen():
+        async for chunk in run_with_sse(
+            app.batch_humanize_web,
+            body.llm_config_name, body.filepath,
+            body.start_chapter, body.end_chapter,
+            body.enable_r8, body.user_focus, body.depth,
+        ):
+            yield chunk
+
+    return _sse_response(_gen())
+
+
 # ── 一键生成全部章节 ──────────────────────────────────────────────────────────
 
 @router.post("/generate/batch")
@@ -553,7 +605,7 @@ def get_generate_status(filepath: str = "./output"):
 
 
 @router.put("/generate/character_dynamics")
-def save_character_dynamics(body: SaveContentRequest):
+def save_character_dynamics_endpoint(body: SaveContentRequest):
     cd_file = os.path.join(body.filepath, "character_dynamics.txt")
     os.makedirs(os.path.dirname(cd_file), exist_ok=True)
     save_string_to_txt(body.content, cd_file)

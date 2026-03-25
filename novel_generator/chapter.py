@@ -578,6 +578,42 @@ def build_chapter_prompt(
     else:
         world_building_block = ""
 
+    # 判断是否需要注入开篇引导（续写弧首章或前章不存在）
+    opening_guidance = ""
+    is_arc_opener = False
+    # 检测：前一章文件不存在（续写弧的第一章）
+    prev_chapter_file = os.path.join(chapters_dir, f"chapter_{novel_number - 1}.txt")
+    if novel_number > 1 and not os.path.exists(prev_chapter_file):
+        is_arc_opener = True
+    # 检测：章节定位中含有"开篇"、"起始"、"序章"等关键词
+    if any(kw in chapter_role for kw in ("开篇", "起始", "新篇", "序章", "开局")):
+        is_arc_opener = True
+
+    if is_arc_opener:
+        opening_guidance = """\
+【新篇章开篇要求】
+本章是新故事弧的起点，需要重新建立读者的阅读锚点：
+
+1. 状态重锚——开篇用 1-2 段交代主角当前处境：
+   - 距离上一弧过了多久、主角现在在哪、状态如何
+   - 通过具体场景（而非旁白概述）呈现，如主角正在做某事
+   - 自然带出上一弧遗留的影响（伤疤、新能力、关系变化等）
+
+2. 新冲突植入——前 1/3 篇幅内建立新弧的核心悬念：
+   - 出现一个新的异常/事件/人物，打破当前平衡
+   - 让读者产生「这次又要面对什么」的期待
+
+3. 新角色/新设定引入——如有新登场角色或新世界观元素：
+   - 在行动和互动中展示，避免设定说明文
+   - 与已有角色的首次互动要有张力"""
+    elif novel_number <= 3:
+        opening_guidance = """\
+【前三章特别提醒】
+当前仍处于故事的建立期，在推进剧情的同时注意：
+- 尚未正式出场的主要角色，在出场时用行为和对话建立鲜明的第一印象
+- 世界观规则尚未充分展示的部分，通过角色的行为和环境描写自然带出
+- 避免所有角色都已经彼此熟悉的写法——如果是初次见面，要有初见的质感"""
+
     # 返回最终提示词
     prompt = prompt_definitions.next_chapter_draft_prompt.format(
         user_guidance=user_guidance if user_guidance else "无特殊指导",
@@ -607,7 +643,8 @@ def build_chapter_prompt(
         next_chapter_plot_twist_level=next_chapter_twist,
         next_chapter_summary=next_chapter_summary,
         filtered_context=filtered_context,
-        world_building_block=world_building_block
+        world_building_block=world_building_block,
+        opening_guidance=opening_guidance,
     )
     # 作者参考库检索（绑定到文风，未选择文风时跳过）
     if enable_author_reference and author_style_name and styles_dir:
@@ -679,9 +716,12 @@ def generate_chapter_draft(
     inject_world_building: bool = False,
     author_style_name: str = "",
     styles_dir: str = "",
+    progress=None,
+    enable_streaming: bool = True,
 ) -> str:
     """
-    生成章节草稿，支持自定义提示词
+    生成章节草稿，支持自定义提示词。
+    progress: 可选的进度回调，传入后启用流式输出，实时显示生成进度。
     """
     if custom_prompt_text is None:
         prompt_text = build_chapter_prompt(
@@ -737,7 +777,8 @@ def generate_chapter_draft(
     )
 
     logging.info(f"[Draft] Chapter {novel_number}: LLM adapter就绪, 正在调用LLM (model={model_name}, timeout={timeout}s)...")
-    chapter_content = invoke_with_cleaning(llm_adapter, prompt_text)
+    chapter_content = invoke_with_cleaning(llm_adapter, prompt_text, progress=progress,
+                                              enable_streaming=enable_streaming)
     logging.info(f"[Draft] Chapter {novel_number}: LLM返回, 内容长度={len(chapter_content) if chapter_content else 0}")
     if not chapter_content.strip():
         logging.warning("Generated chapter draft is empty.")

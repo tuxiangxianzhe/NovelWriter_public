@@ -33,6 +33,7 @@ export function useWorkshopState() {
   const wordNumber = ref(3000)
   const userGuidance = ref('')
   const xpType = ref('')
+  const xpSelectedPresets = ref<string[]>([])
   const numCharacters = ref('3-6')
   const contNumCharacters = ref('1-3')
 
@@ -63,6 +64,16 @@ export function useWorkshopState() {
   const charStateText = ref('')
   const worldText = ref('')
   const plotText = ref('')
+
+  // 修订相关
+  const revisionGuidance = ref({
+    core_seed: '', characters: '', char_state: '', world: '', plot: '',
+    cont_seed: '', cont_world: '', cont_chars: '', cont_arcs: '', cont_char_state: '',
+  })
+  const revisionState = ref({
+    core_seed: mkState(), characters: mkState(), char_state: mkState(), world: mkState(), plot: mkState(),
+    cont_seed: mkState(), cont_world: mkState(), cont_chars: mkState(), cont_arcs: mkState(), cont_char_state: mkState(),
+  })
 
   // 注入选项
   const injectCharToWorld = ref(false)
@@ -116,6 +127,23 @@ export function useWorkshopState() {
   // 润色
   const polishGuidance = ref('')
 
+  // 去 AI 痕迹
+  const humanize = ref(mkState())
+  const humanizerBatch = ref(false)
+  const humanizerR8 = ref(false)
+  const humanizerFocus = ref('')
+  const humanizerStart = ref(1)
+  const humanizerEnd = ref(1)
+  const humanizerDepth = ref<'quick' | 'standard' | 'deep'>('standard')
+  // 对比预览状态
+  const humanizerOriginal = ref('')
+  const humanizerHumanized = ref('')
+  const humanizerChanges = ref('')
+  const humanizerPreviewTab = ref<'humanized' | 'original' | 'changes'>('humanized')
+  const humanizerPending = ref(false)       // 有待确认的结果
+  const humanizerSaving = ref(false)
+  const humanizerChapterNum = ref(0)        // 处理的章节号
+
   // 导出
   const exporting = ref(false)
 
@@ -146,6 +174,7 @@ export function useWorkshopState() {
       wordNumber.value = p.word_number ?? 3000
       userGuidance.value = p.user_guidance ?? ''
       xpType.value = p.xp_type ?? ''
+      xpSelectedPresets.value = p.xp_selected_presets ?? []
       if (p.arch_style) archStyle.value = p.arch_style
       if (p.bp_style) bpStyle.value = p.bp_style
       if (p.ch_style) chStyle.value = p.ch_style
@@ -193,6 +222,7 @@ export function useWorkshopState() {
         wordNumber.value = p.word_number ?? 3000
         userGuidance.value = p.user_guidance ?? ''
         xpType.value = p.xp_type ?? ''
+        xpSelectedPresets.value = p.xp_selected_presets ?? []
         if (p.llm_config_name && configStore.llmChoices.includes(p.llm_config_name)) {
           llmConfig.value = p.llm_config_name
         }
@@ -256,6 +286,7 @@ export function useWorkshopState() {
         word_number: wordNumber.value,
         user_guidance: userGuidance.value,
         xp_type: xpType.value,
+        xp_selected_presets: xpSelectedPresets.value,
         llm_config_name: llmConfig.value,
         emb_config_name: embConfig.value,
         arch_style: archStyle.value,
@@ -280,7 +311,7 @@ export function useWorkshopState() {
     }, 1500)
   }
 
-  watch([topic, genre, numChapters, wordNumber, userGuidance, xpType,
+  watch([topic, genre, numChapters, wordNumber, userGuidance, xpType, xpSelectedPresets,
          llmConfig, embConfig, archStyle, bpStyle, chStyle, chNarrativeStyle,
          contStyle, contXpType,
          seedText, charText, charStateText, worldText, plotText,
@@ -295,7 +326,12 @@ export function useWorkshopState() {
     state.progressValue = undefined
     const handle = postSSE(
       url, body,
-      (msg, value) => { state.progress = msg; if (value !== undefined) state.progressValue = value },
+      (msg, value, content) => {
+        state.progress = msg
+        if (value !== undefined) state.progressValue = value
+        // 流式输出：progress 事件携带的 content 实时显示在结果区域
+        if (content) state.result = content
+      },
       (content) => { state.result = content },
       (err) => { state.error = err; state.running = false },
       () => { state.running = false; state.sseHandle = null },
@@ -482,6 +518,32 @@ export function useWorkshopState() {
     })
   }
 
+  function doRevise(stepType: string) {
+    const textRefs: Record<string, { value: string }> = {
+      core_seed: seedText, characters: charText, char_state: charStateText,
+      world: worldText, plot: plotText,
+      cont_seed: contSeedText, cont_world: contWorldText, cont_chars: contCharsText,
+      cont_arcs: contArcsText, cont_char_state: contCharStateText,
+    }
+    // Map to backend step_type labels
+    const backendStepType: Record<string, string> = {
+      core_seed: 'core_seed', characters: 'characters', char_state: 'char_state',
+      world: 'world', plot: 'plot',
+      cont_seed: 'core_seed', cont_world: 'world', cont_chars: 'characters',
+      cont_arcs: 'plot', cont_char_state: 'char_state',
+    }
+    const textRef = textRefs[stepType]
+    const state = (revisionState.value as Record<string, StepState>)[stepType]
+    const guidance = (revisionGuidance.value as Record<string, string>)[stepType]
+    if (!textRef?.value || !guidance) return
+    runStepSSE(state, textRef, generateApi.reviseStep(), {
+      llm_config_name: llmConfig.value,
+      original_content: textRef.value,
+      revision_guidance: guidance,
+      step_type: backendStepType[stepType] || stepType,
+    })
+  }
+
   async function doAssemble() {
     try {
       const res = await generateApi.assembleArch({
@@ -561,6 +623,82 @@ export function useWorkshopState() {
       narrative_style_name: chNarrativeStyle.value === '不使用文风' ? null : chNarrativeStyle.value || null,
       xp_type: xpType.value, polish_guidance: polishGuidance.value,
     })
+  }
+
+  // ── Step 6: 去 AI 痕迹 ─────────────────────────────────────────────────
+  function _resetHumanizerPreview() {
+    humanizerOriginal.value = ''
+    humanizerHumanized.value = ''
+    humanizerChanges.value = ''
+    humanizerPending.value = false
+    humanizerPreviewTab.value = 'humanized'
+    humanizerChapterNum.value = 0
+  }
+
+  function doHumanize() {
+    _resetHumanizerPreview()
+    const s = humanize.value
+    s.running = true; s.progress = ''; s.result = ''; s.error = ''; s.progressValue = undefined
+    const handle = postSSE(
+      '/generate/humanize',
+      {
+        llm_config_name: llmConfig.value,
+        filepath: filepath.value,
+        chapter_num: chapterNum.value,
+        enable_r8: humanizerR8.value,
+        user_focus: humanizerFocus.value,
+        depth: humanizerDepth.value,
+      },
+      (msg, value) => { s.progress = msg; if (value !== undefined) s.progressValue = value },
+      (content) => {
+        s.result = content
+        // 解析 JSON 结果，填充对比预览
+        try {
+          const data = JSON.parse(content)
+          humanizerOriginal.value = data.original ?? ''
+          humanizerHumanized.value = data.humanized ?? ''
+          humanizerChanges.value = data.changes ?? ''
+          humanizerChapterNum.value = data.chapter_num ?? chapterNum.value
+          humanizerPending.value = true
+          humanizerPreviewTab.value = 'humanized'
+        } catch {
+          // 非 JSON（错误信息等），直接显示
+        }
+      },
+      (err) => { s.error = err; s.running = false },
+      () => { s.running = false; s.sseHandle = null },
+    )
+    s.sseHandle = handle
+  }
+
+  function doBatchHumanize() {
+    _resetHumanizerPreview()
+    runSSE(humanize.value, '/generate/humanize/batch', {
+      llm_config_name: llmConfig.value,
+      filepath: filepath.value,
+      start_chapter: humanizerStart.value,
+      end_chapter: humanizerEnd.value,
+      enable_r8: humanizerR8.value,
+      user_focus: humanizerFocus.value,
+      depth: humanizerDepth.value,
+    })
+  }
+
+  async function doConfirmHumanize(keepHumanized: boolean) {
+    const num = humanizerChapterNum.value
+    const text = keepHumanized ? humanizerHumanized.value : humanizerOriginal.value
+    if (!text || !num) return
+    humanizerSaving.value = true
+    try {
+      await generateApi.saveChapter(num, text, filepath.value)
+      humanize.value.result = keepHumanized
+        ? `✅ 第 ${num} 章已保存去 AI 后的版本`
+        : `✅ 第 ${num} 章已保留原文`
+      humanizerPending.value = false
+    } catch (e: unknown) {
+      humanize.value.error = (e as Error).message
+    }
+    humanizerSaving.value = false
   }
 
   // ── 导出 ──────────────────────────────────────────────────────────────────
@@ -713,7 +851,7 @@ export function useWorkshopState() {
     projectStore, configStore, generateStore,
     // basic params
     llmConfig, embConfig, filepath,
-    topic, genre, numChapters, wordNumber, userGuidance, xpType, numCharacters, contNumCharacters,
+    topic, genre, numChapters, wordNumber, userGuidance, xpType, xpSelectedPresets, numCharacters, contNumCharacters,
     // styles
     styleList, archStyle, bpStyle, chStyle, chNarrativeStyle, contStyle,
     // step states
@@ -744,12 +882,19 @@ export function useWorkshopState() {
     characterDynamicsContent,
     // polish
     polishGuidance,
+    // humanizer
+    humanize, humanizerBatch, humanizerR8, humanizerFocus,
+    humanizerStart, humanizerEnd, humanizerDepth,
+    humanizerOriginal, humanizerHumanized, humanizerChanges,
+    humanizerPreviewTab, humanizerPending, humanizerSaving,
+    doHumanize, doBatchHumanize, doConfirmHumanize,
     // misc
     exporting, saveMsg, reloading,
     // functions
     reloadProjectContent, cancelSSE,
     saveArchitecture, saveBlueprint, saveChapter, saveCharacterDynamics,
     saveComponent, saveCoreSeed, saveCharDynamics, saveCharState, saveWorldBuilding, savePlotArch,
+    revisionGuidance, revisionState, doRevise,
     doGenerateArch, doStepSeed, doStepChar, doStepCharState, doStepWorld, doStepPlot, doAssemble,
     doGenerateBP, doGenerateChapter, doFinalize,
     doBatchGenerate, doExpand, doExportNovel,

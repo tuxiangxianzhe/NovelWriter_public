@@ -52,6 +52,12 @@ const router = createRouter({
       meta: { title: '小说阅读' },
     },
     {
+      path: '/brainstorm',
+      name: 'brainstorm',
+      component: () => import('@/views/BrainstormView.vue'),
+      meta: { title: '创意讨论' },
+    },
+    {
       path: '/logs',
       name: 'logs',
       component: () => import('@/views/LogsView.vue'),
