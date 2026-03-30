@@ -75,6 +75,11 @@ export function useWorkshopState() {
     cont_seed: mkState(), cont_world: mkState(), cont_chars: mkState(), cont_arcs: mkState(), cont_char_state: mkState(),
   })
 
+  const revisionContext = ref({
+    include_core_seed: false, include_characters: false,
+    include_world_building: false, include_plot: false,
+  })
+
   // 注入选项
   const injectCharToWorld = ref(false)
   // 章节参数
@@ -126,6 +131,9 @@ export function useWorkshopState() {
 
   // 润色
   const polishGuidance = ref('')
+  const expandOriginal = ref('')   // 润色前原文
+  const expandNew = ref('')        // 润色后新文
+  const expandChapterNum = ref(0)  // 润色的章节号
 
   // 去 AI 痕迹
   const humanize = ref(mkState())
@@ -541,6 +549,11 @@ export function useWorkshopState() {
       original_content: textRef.value,
       revision_guidance: guidance,
       step_type: backendStepType[stepType] || stepType,
+      filepath: filepath.value,
+      include_core_seed: revisionContext.value.include_core_seed,
+      include_characters: revisionContext.value.include_characters,
+      include_world_building: revisionContext.value.include_world_building,
+      include_plot: revisionContext.value.include_plot,
     })
   }
 
@@ -616,13 +629,57 @@ export function useWorkshopState() {
 
   // ── Step 5: 润色 ─────────────────────────────────────────────────────────
   function doExpand() {
-    runSSE(expand.value, '/generate/expand', {
-      llm_config_name: llmConfig.value, filepath: filepath.value,
-      chapter_num: chapterNum.value,
-      style_name: chStyle.value === '不使用文风' ? null : chStyle.value || null,
-      narrative_style_name: chNarrativeStyle.value === '不使用文风' ? null : chNarrativeStyle.value || null,
-      xp_type: xpType.value, polish_guidance: polishGuidance.value,
-    })
+    // 清空上次的对比结果
+    expandOriginal.value = ''
+    expandNew.value = ''
+    expandChapterNum.value = chapterNum.value
+    const s = expand.value
+    s.running = true; s.progress = ''; s.result = ''; s.error = ''; s.progressValue = undefined
+    const handle = postSSE(
+      '/generate/expand',
+      {
+        llm_config_name: llmConfig.value, filepath: filepath.value,
+        chapter_num: chapterNum.value,
+        style_name: chStyle.value === '不使用文风' ? null : chStyle.value || null,
+        narrative_style_name: chNarrativeStyle.value === '不使用文风' ? null : chNarrativeStyle.value || null,
+        xp_type: xpType.value, polish_guidance: polishGuidance.value,
+      },
+      (msg, value, content) => {
+        s.progress = msg
+        if (value !== undefined) s.progressValue = value
+        if (content) s.result = content
+      },
+      (content) => {
+        // 完成回调：解析 JSON 响应
+        s.result = content
+        const marker = '<!--EXPAND_JSON-->'
+        if (content.startsWith(marker)) {
+          try {
+            const data = JSON.parse(content.slice(marker.length))
+            expandOriginal.value = data.original || ''
+            expandNew.value = data.expanded || ''
+            expandChapterNum.value = data.chapter_num || chapterNum.value
+            s.result = '' // 清空 result，用 expandNew 展示
+          } catch { /* 解析失败则保持原样 */ }
+        }
+      },
+      (err) => { s.error = err; s.running = false },
+      () => { s.running = false; s.sseHandle = null },
+    )
+    s.sseHandle = handle
+  }
+
+  async function saveExpandResult(useNew: boolean) {
+    const num = expandChapterNum.value
+    const content = useNew ? expandNew.value : expandOriginal.value
+    if (!num || !content) return
+    try {
+      await generateApi.saveChapter(num, content, filepath.value)
+      saveMsg.value = `✅ 第${num}章已保存（${useNew ? '新版' : '旧版'}）`
+    } catch (e: unknown) {
+      saveMsg.value = `❌ ${(e as Error).message}`
+    }
+    setTimeout(() => { saveMsg.value = '' }, 3000)
   }
 
   // ── Step 6: 去 AI 痕迹 ─────────────────────────────────────────────────
@@ -882,6 +939,7 @@ export function useWorkshopState() {
     characterDynamicsContent,
     // polish
     polishGuidance,
+    expandOriginal, expandNew, expandChapterNum, saveExpandResult,
     // humanizer
     humanize, humanizerBatch, humanizerR8, humanizerFocus,
     humanizerStart, humanizerEnd, humanizerDepth,
@@ -894,7 +952,7 @@ export function useWorkshopState() {
     reloadProjectContent, cancelSSE,
     saveArchitecture, saveBlueprint, saveChapter, saveCharacterDynamics,
     saveComponent, saveCoreSeed, saveCharDynamics, saveCharState, saveWorldBuilding, savePlotArch,
-    revisionGuidance, revisionState, doRevise,
+    revisionGuidance, revisionState, revisionContext, doRevise,
     doGenerateArch, doStepSeed, doStepChar, doStepCharState, doStepWorld, doStepPlot, doAssemble,
     doGenerateBP, doGenerateChapter, doFinalize,
     doBatchGenerate, doExpand, doExportNovel,

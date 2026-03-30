@@ -340,6 +340,11 @@ class ReviseStepRequest(BaseModel):
     original_content: str
     revision_guidance: str
     step_type: str = ""  # core_seed / characters / char_state / world / plot
+    filepath: str = ""
+    include_core_seed: bool = False
+    include_characters: bool = False
+    include_world_building: bool = False
+    include_plot: bool = False
 
 
 class BrainstormMessage(BaseModel):

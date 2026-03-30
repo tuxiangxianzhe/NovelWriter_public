@@ -51,20 +51,25 @@ def parse_character_blocks(state_text: str) -> list[tuple[str, str]]:
     return blocks
 
 
-def _name_matches(keywords: list[str], block_name: str) -> bool:
+def _name_matches(keywords: list[str], block_name: str, block_text: str = "") -> bool:
     """
-    判断关键词列表中是否有任何一个与角色块名匹配。
+    判断关键词列表中是否有任何一个与角色块名或块文本前部匹配。
     支持灵活匹配：将关键词按括号拆分为子片段，任一片段（≥2字）命中即可。
     例如关键词 '男主（青木）' 拆出 '男主' 和 '青木'，能匹配 '男主（园艺师青木）'。
+    同时检查 block_text 的前几行，以处理"男主角名：\n陈玉"这类角色名不在标题行的情况。
     """
+    # 取 block_text 前3行用于辅助匹配
+    head_lines = "\n".join(block_text.split("\n")[:3]) if block_text else ""
+    search_text = block_name + "\n" + head_lines
+
     for kw in keywords:
-        # 直接子串匹配
-        if kw in block_name or block_name in kw:
+        # 直接子串匹配（同时搜索块标题和前几行）
+        if kw in search_text or block_name in kw:
             return True
         # 拆分括号内外片段再匹配
         tokens = re.split(r'[（）()·\s]+', kw)
         for token in tokens:
-            if token and len(token) >= 2 and token in block_name:
+            if token and len(token) >= 2 and token in search_text:
                 return True
     return False
 
@@ -96,7 +101,7 @@ def filter_character_state(character_state_text: str, characters_involved: str) 
 
     matched = []
     for name, block_text in blocks:
-        if _name_matches(keywords, name):
+        if _name_matches(keywords, name, block_text):
             matched.append(block_text)
 
     # 无匹配 → 安全回退返回全文
@@ -235,7 +240,7 @@ def _update_character_states_by_role(
     updated_blocks = []
     for name, block_text in blocks:
         # 判断该角色是否在本章出场
-        if involved_keywords and not _name_matches(involved_keywords, name):
+        if involved_keywords and not _name_matches(involved_keywords, name, block_text):
             logging.info(f"[Finalize] 跳过未出场角色: {name}")
             updated_blocks.append(block_text)
             continue

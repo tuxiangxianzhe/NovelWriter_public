@@ -184,6 +184,9 @@ def revise_step_content(body: ReviseStepRequest):
             app.revise_step_content,
             body.llm_config_name, body.original_content,
             body.revision_guidance, body.step_type,
+            body.filepath,
+            body.include_core_seed, body.include_characters,
+            body.include_world_building, body.include_plot,
         ):
             yield chunk
 

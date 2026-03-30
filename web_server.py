@@ -584,12 +584,16 @@ class NovelGeneratorWeb:
                 progress=progress
             )
 
-            # 保存扩写结果
-            save_string_to_txt(expanded_text, chapter_file)
-
+            # 不再自动保存，由前端控制保存
             progress(1.0, desc="扩写完成!")
 
-            return f"✅ 第 {int(chapter_num)} 章场景扩写完成!\n\n{expanded_text}"
+            # 返回 JSON 包含原文和新文，前端解析后分列展示
+            import json as _json
+            return "<!--EXPAND_JSON-->" + _json.dumps({
+                "original": chapter_text,
+                "expanded": expanded_text,
+                "chapter_num": int(chapter_num),
+            }, ensure_ascii=False)
 
         except Exception as e:
             logging.error(f"场景扩写失败: {str(e)}")
@@ -882,6 +886,9 @@ class NovelGeneratorWeb:
 
     def revise_step_content(self, llm_config_name, original_content,
                             revision_guidance, step_type="",
+                            filepath="",
+                            inc_seed=False, inc_chars=False,
+                            inc_world=False, inc_plot=False,
                             progress=gr.Progress()):
         """基于已有内容 + 修改建议，让 LLM 修订内容"""
         try:
@@ -905,21 +912,44 @@ class NovelGeneratorWeb:
             }
             step_label = step_labels.get(step_type, "创作内容")
 
-            prompt = f"""以下是当前的【{step_label}】内容：
+            # 收集项目上下文
+            context_block = ""
+            if filepath and any([inc_seed, inc_chars, inc_world, inc_plot]):
+                context_parts = []
+                if inc_seed:
+                    text = read_core_seed(filepath)
+                    if text:
+                        context_parts.append(f"【核心种子】\n{text}")
+                if inc_chars:
+                    text = read_character_dynamics(filepath)
+                    if text:
+                        context_parts.append(f"【角色动力学】\n{text}")
+                if inc_world:
+                    text = read_world_building(filepath)
+                    if text:
+                        context_parts.append(f"【世界观设定】\n{text}")
+                if inc_plot:
+                    text = read_plot_architecture(filepath)
+                    if text:
+                        context_parts.append(f"【剧情架构】\n{text}")
+                if context_parts:
+                    context_block = "\n===== 参考资料（仅供参考，不要出现在输出中） =====\n" + "\n\n".join(context_parts) + "\n===== 参考资料结束 =====\n"
 
---- 当前内容 ---
+            prompt = f"""你的任务是修订下方「待修订内容」部分的【{step_label}】文本。
+{context_block}
+===== 待修订内容（仅修改此部分） =====
 {original_content}
---- 当前内容结束 ---
+===== 待修订内容结束 =====
 
-用户对以上内容提出了以下修改要求：
+用户的修改要求：
 {revision_guidance}
 
-请基于当前内容进行修订，满足用户的修改要求。注意：
+修订规则：
 1. 只修改用户要求修改的部分，保留用户未提及的内容不变
 2. 保持原有的格式和结构
-3. 修改后的内容应与整体设定保持一致
+3. 修改后的内容应与上方参考资料中的设定保持一致
 
-仅返回修订后的完整{step_label}文本，不要解释修改了什么。"""
+【重要】仅返回修订后的完整【{step_label}】文本。不要返回参考资料中的内容（核心种子、角色动力学等），不要添加任何解释。"""
 
             progress(0.2, desc="正在修订...")
 

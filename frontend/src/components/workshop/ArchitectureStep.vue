@@ -357,6 +357,13 @@ defineProps<{ state: ReturnType<typeof useWorkshopState> }>()
               <details v-if="state.contSeedText.value" class="border border-dashed border-[var(--color-parchment-darker)] rounded-lg">
                 <summary class="px-3 py-2 cursor-pointer text-xs font-medium text-[var(--color-leather)] select-none">✏️ 基于建议修订</summary>
                 <div class="px-3 pb-3 pt-1 space-y-2">
+                  <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-[var(--color-ink-light)]">
+                    <span>注入上下文：</span>
+                    <label class="inline-flex items-center gap-1 cursor-pointer"><input type="checkbox" v-model="state.revisionContext.value.include_core_seed" class="rounded" />种子</label>
+                    <label class="inline-flex items-center gap-1 cursor-pointer"><input type="checkbox" v-model="state.revisionContext.value.include_characters" class="rounded" />角色</label>
+                    <label class="inline-flex items-center gap-1 cursor-pointer"><input type="checkbox" v-model="state.revisionContext.value.include_world_building" class="rounded" />世界观</label>
+                    <label class="inline-flex items-center gap-1 cursor-pointer"><input type="checkbox" v-model="state.revisionContext.value.include_plot" class="rounded" />剧情</label>
+                  </div>
                   <input v-model="state.revisionGuidance.value.cont_seed" placeholder="输入修改建议…" class="w-full border border-[var(--color-parchment-darker)] rounded px-2 py-1 text-sm" />
                   <div class="flex items-center gap-2">
                     <button @click="state.doRevise('cont_seed')" :disabled="state.revisionState.value.cont_seed.running || !state.revisionGuidance.value.cont_seed || !state.llmConfig.value" class="btn-sm" type="button">
@@ -381,6 +388,13 @@ defineProps<{ state: ReturnType<typeof useWorkshopState> }>()
               <details v-if="state.contWorldText.value" class="border border-dashed border-[var(--color-parchment-darker)] rounded-lg">
                 <summary class="px-3 py-2 cursor-pointer text-xs font-medium text-[var(--color-leather)] select-none">✏️ 基于建议修订</summary>
                 <div class="px-3 pb-3 pt-1 space-y-2">
+                  <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-[var(--color-ink-light)]">
+                    <span>注入上下文：</span>
+                    <label class="inline-flex items-center gap-1 cursor-pointer"><input type="checkbox" v-model="state.revisionContext.value.include_core_seed" class="rounded" />种子</label>
+                    <label class="inline-flex items-center gap-1 cursor-pointer"><input type="checkbox" v-model="state.revisionContext.value.include_characters" class="rounded" />角色</label>
+                    <label class="inline-flex items-center gap-1 cursor-pointer"><input type="checkbox" v-model="state.revisionContext.value.include_world_building" class="rounded" />世界观</label>
+                    <label class="inline-flex items-center gap-1 cursor-pointer"><input type="checkbox" v-model="state.revisionContext.value.include_plot" class="rounded" />剧情</label>
+                  </div>
                   <input v-model="state.revisionGuidance.value.cont_world" placeholder="输入修改建议…" class="w-full border border-[var(--color-parchment-darker)] rounded px-2 py-1 text-sm" />
                   <div class="flex items-center gap-2">
                     <button @click="state.doRevise('cont_world')" :disabled="state.revisionState.value.cont_world.running || !state.revisionGuidance.value.cont_world || !state.llmConfig.value" class="btn-sm" type="button">
@@ -409,6 +423,13 @@ defineProps<{ state: ReturnType<typeof useWorkshopState> }>()
               <details v-if="state.contCharsText.value" class="border border-dashed border-[var(--color-parchment-darker)] rounded-lg">
                 <summary class="px-3 py-2 cursor-pointer text-xs font-medium text-[var(--color-leather)] select-none">✏️ 基于建议修订</summary>
                 <div class="px-3 pb-3 pt-1 space-y-2">
+                  <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-[var(--color-ink-light)]">
+                    <span>注入上下文：</span>
+                    <label class="inline-flex items-center gap-1 cursor-pointer"><input type="checkbox" v-model="state.revisionContext.value.include_core_seed" class="rounded" />种子</label>
+                    <label class="inline-flex items-center gap-1 cursor-pointer"><input type="checkbox" v-model="state.revisionContext.value.include_characters" class="rounded" />角色</label>
+                    <label class="inline-flex items-center gap-1 cursor-pointer"><input type="checkbox" v-model="state.revisionContext.value.include_world_building" class="rounded" />世界观</label>
+                    <label class="inline-flex items-center gap-1 cursor-pointer"><input type="checkbox" v-model="state.revisionContext.value.include_plot" class="rounded" />剧情</label>
+                  </div>
                   <input v-model="state.revisionGuidance.value.cont_chars" placeholder="输入修改建议，如：调整角色性格、修改外貌描写…" class="w-full border border-[var(--color-parchment-darker)] rounded px-2 py-1 text-sm" />
                   <div class="flex items-center gap-2">
                     <button @click="state.doRevise('cont_chars')" :disabled="state.revisionState.value.cont_chars.running || !state.revisionGuidance.value.cont_chars || !state.llmConfig.value" class="btn-sm" type="button">
@@ -465,6 +486,13 @@ defineProps<{ state: ReturnType<typeof useWorkshopState> }>()
               <details v-if="state.contArcsText.value" class="border border-dashed border-[var(--color-parchment-darker)] rounded-lg">
                 <summary class="px-3 py-2 cursor-pointer text-xs font-medium text-[var(--color-leather)] select-none">✏️ 基于建议修订</summary>
                 <div class="px-3 pb-3 pt-1 space-y-2">
+                  <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-[var(--color-ink-light)]">
+                    <span>注入上下文：</span>
+                    <label class="inline-flex items-center gap-1 cursor-pointer"><input type="checkbox" v-model="state.revisionContext.value.include_core_seed" class="rounded" />种子</label>
+                    <label class="inline-flex items-center gap-1 cursor-pointer"><input type="checkbox" v-model="state.revisionContext.value.include_characters" class="rounded" />角色</label>
+                    <label class="inline-flex items-center gap-1 cursor-pointer"><input type="checkbox" v-model="state.revisionContext.value.include_world_building" class="rounded" />世界观</label>
+                    <label class="inline-flex items-center gap-1 cursor-pointer"><input type="checkbox" v-model="state.revisionContext.value.include_plot" class="rounded" />剧情</label>
+                  </div>
                   <input v-model="state.revisionGuidance.value.cont_arcs" placeholder="输入修改建议，如：增加更多冲突、调整剧情节奏…" class="w-full border border-[var(--color-parchment-darker)] rounded px-2 py-1 text-sm" />
                   <div class="flex items-center gap-2">
                     <button @click="state.doRevise('cont_arcs')" :disabled="state.revisionState.value.cont_arcs.running || !state.revisionGuidance.value.cont_arcs || !state.llmConfig.value" class="btn-sm" type="button">
@@ -489,6 +517,13 @@ defineProps<{ state: ReturnType<typeof useWorkshopState> }>()
               <details v-if="state.contCharStateText.value" class="border border-dashed border-[var(--color-parchment-darker)] rounded-lg">
                 <summary class="px-3 py-2 cursor-pointer text-xs font-medium text-[var(--color-leather)] select-none">✏️ 基于建议修订</summary>
                 <div class="px-3 pb-3 pt-1 space-y-2">
+                  <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-[var(--color-ink-light)]">
+                    <span>注入上下文：</span>
+                    <label class="inline-flex items-center gap-1 cursor-pointer"><input type="checkbox" v-model="state.revisionContext.value.include_core_seed" class="rounded" />种子</label>
+                    <label class="inline-flex items-center gap-1 cursor-pointer"><input type="checkbox" v-model="state.revisionContext.value.include_characters" class="rounded" />角色</label>
+                    <label class="inline-flex items-center gap-1 cursor-pointer"><input type="checkbox" v-model="state.revisionContext.value.include_world_building" class="rounded" />世界观</label>
+                    <label class="inline-flex items-center gap-1 cursor-pointer"><input type="checkbox" v-model="state.revisionContext.value.include_plot" class="rounded" />剧情</label>
+                  </div>
                   <input v-model="state.revisionGuidance.value.cont_char_state" placeholder="输入修改建议，如：丰富外貌描写、调整角色初始状态…" class="w-full border border-[var(--color-parchment-darker)] rounded px-2 py-1 text-sm" />
                   <div class="flex items-center gap-2">
                     <button @click="state.doRevise('cont_char_state')" :disabled="state.revisionState.value.cont_char_state.running || !state.revisionGuidance.value.cont_char_state || !state.llmConfig.value" class="btn-sm" type="button">
