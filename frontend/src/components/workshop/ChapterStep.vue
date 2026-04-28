@@ -46,9 +46,15 @@ defineProps<{ state: ReturnType<typeof useWorkshopState> }>()
           <label class="block text-xs text-[var(--color-ink-light)] mb-1">章节指导（覆盖全局）</label>
           <input v-model="state.chGuidance.value" placeholder="可选" class="w-full border border-[var(--color-parchment-darker)] rounded-md px-3 py-2 text-sm" />
         </div>
-        <div class="flex items-center gap-2">
-          <input id="inject-world" v-model="state.injectWorldBuilding.value" type="checkbox" class="rounded border-[var(--color-parchment-darker)]" />
-          <label for="inject-world" class="text-xs text-[var(--color-ink-light)] select-none">注入世界观设定</label>
+        <div class="flex items-center gap-4 flex-wrap">
+          <div class="flex items-center gap-1.5">
+            <input id="inject-world" v-model="state.injectWorldBuilding.value" type="checkbox" class="rounded border-[var(--color-parchment-darker)]" />
+            <label for="inject-world" class="text-xs text-[var(--color-ink-light)] select-none">注入世界观设定</label>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <input id="scene-by-scene" v-model="state.sceneByScene.value" type="checkbox" class="rounded border-[var(--color-parchment-darker)]" />
+            <label for="scene-by-scene" class="text-xs text-[var(--color-ink-light)] select-none">按场景分段生成（需细纲，高强度场景浓墨重彩/普通场景简练清晰）</label>
+          </div>
         </div>
       </div>
       <div class="flex justify-end">

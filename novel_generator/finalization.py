@@ -372,10 +372,16 @@ def expand_scenes(
     writing_style: str = "",
     narrative_instruction: str = "",
     polish_guidance: str = "",
+    polish_mode: str = "enhance",
+    extra_context: str = "",
     progress=None
 ) -> str:
     """
-    对章节文本中的关键场景（尤其是亲密/性场景）进行扩写细化。
+    对章节文本进行润色。支持多种模式：
+    - enhance: 通用润色扩写（默认，使用预设prompt）
+    - sensual: 专注亲密场景润色
+    - modify: 修改指定段落的剧情
+    - add: 在指定位置增加新内容
     """
     llm_adapter = create_llm_adapter(
         interface_format=interface_format,
@@ -386,10 +392,54 @@ def expand_scenes(
         max_tokens=max_tokens,
         timeout=timeout
     )
-    prompt = prompt_definitions.scene_expansion_prompt.format(
-        chapter_text=chapter_text,
-        sensuality_level=sensuality_level or "未指定"
-    )
+
+    _MODE_PROMPTS = {
+        "modify": """\
+你是一位专业的小说编辑，擅长根据作者意图修改剧情。
+
+===== 章节原文 =====
+{chapter_text}
+
+===== 任务 =====
+请根据作者的修改建议，对章节中的指定内容进行改写。
+
+修改原则：
+1. 只改动作者指定的部分，未提及的内容保持原样
+2. 改写后的内容要与前后文自然衔接，不出现逻辑断裂
+3. 保持角色性格和行为的一致性
+4. 保持原文的文风和叙事视角
+
+输出完整的修改后章节文本，不要解释。""",
+
+        "add": """\
+你是一位专业的小说编辑，擅长在已有章节中补充新内容。
+
+===== 章节原文 =====
+{chapter_text}
+
+===== 任务 =====
+请根据作者的指示，在章节中的指定位置补充新内容。
+
+补充原则：
+1. 新增内容要与原文风格一致，自然融入
+2. 不要删减或大幅改动原有内容
+3. 新增部分的篇幅和细节程度参考原文水准
+4. 确保新增内容与前后文逻辑连贯
+
+输出完整的补充后章节文本，不要解释。""",
+    }
+
+    if polish_mode in _MODE_PROMPTS:
+        prompt = _MODE_PROMPTS[polish_mode].format(chapter_text=chapter_text)
+    else:
+        # enhance 模式：使用预设的 scene_expansion_prompt
+        prompt = prompt_definitions.scene_expansion_prompt.format(
+            chapter_text=chapter_text,
+            sensuality_level=sensuality_level or "未指定"
+        )
+
+    if extra_context:
+        prompt = f"===== 参考资料（仅供参考，不要在输出中包含这些资料本身） =====\n{extra_context}\n===== 参考资料结束 =====\n\n{prompt}"
     if polish_guidance:
         prompt = f"【润色建议】\n{polish_guidance}\n\n{prompt}"
     if writing_style:

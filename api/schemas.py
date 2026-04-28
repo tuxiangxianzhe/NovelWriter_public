@@ -213,6 +213,7 @@ class GenerateChapterRequest(BaseModel):
     narrative_style_name: Optional[str] = None
     xp_type: str = ""
     inject_world_building: bool = False
+    scene_by_scene: bool = False  # 按场景分段生成（需有细纲）
 
 
 class FinalizeChapterRequest(BaseModel):
@@ -231,6 +232,11 @@ class ExpandScenesRequest(BaseModel):
     narrative_style_name: Optional[str] = None
     xp_type: str = ""
     polish_guidance: str = ""
+    polish_mode: str = "enhance"  # enhance / sensual / modify / add
+    include_outline: bool = False
+    include_character_state: bool = False
+    include_summary: bool = False
+    include_world_building: bool = False
 
 
 class BatchGenerateRequest(BaseModel):
@@ -335,6 +341,17 @@ class BatchHumanizerRequest(BaseModel):
     depth: str = "standard"
 
 
+class GenerateDetailedOutlineRequest(BaseModel):
+    llm_config_name: str
+    filepath: str
+    start_chapter: int
+    end_chapter: int
+    num_chapters: int = 10
+    user_guidance: str = ""
+    xp_type: str = ""
+    outline_mode: str = "concise"  # concise / detailed
+
+
 class ReviseStepRequest(BaseModel):
     llm_config_name: str
     original_content: str
@@ -363,6 +380,7 @@ class BrainstormChatRequest(BaseModel):
     include_blueprint: bool = False
     include_character_state: bool = False
     extra_context: str = ""
+    discussion_mode: str = "advisor"  # advisor / casual / brainstorm / devil / roleplay
 
 
 class SSEEvent(BaseModel):

@@ -52,6 +52,8 @@ PROMPT_KEYS = [
     "narrative_calibration_discriminate_prompt",
     "narrative_calibration_revise_prompt",
     "brainstorm_system_prompt",
+    "detailed_outline_prompt",
+    "detailed_outline_prompt_detailed",
 ]
 
 # 提示词中文名映射
@@ -91,6 +93,8 @@ PROMPT_DISPLAY_NAMES = {
     "narrative_calibration_discriminate_prompt": "叙事校准-模式判别",
     "narrative_calibration_revise_prompt": "叙事校准-指令修订",
     "brainstorm_system_prompt": "创意讨论系统提示",
+    "detailed_outline_prompt": "章节细纲生成（精简）",
+    "detailed_outline_prompt_detailed": "章节细纲生成（详细）",
 }
 
 # ============================================================
@@ -1439,6 +1443,122 @@ _DEFAULT_PROMPTS["brainstorm_system_prompt"] = """\
 
 请基于以下小说项目的已有资料，与用户进行深入的创意讨论。"""
 
+_DEFAULT_PROMPTS["detailed_outline_prompt"] = """\
+基于以下小说架构和章节蓝图，为第{n}章到第{m}章生成详细的章节细纲。
+
+===== 小说架构 =====
+{novel_architecture}
+
+===== 章节蓝图（第{n}-{m}章） =====
+{chapter_range_blueprints}
+
+===== 已有细纲（供参考衔接） =====
+{existing_outlines}
+
+===== 创作指导 =====
+{user_guidance}
+
+请为每一章生成细纲，每章严格控制在1000-2000字，包含以下内容：
+
+1. 场景分解（本章由哪几个场景组成）：
+   每个场景用1-3句话概括：地点 + 在场角色 + 核心事件（谁做了什么、结果如何）。
+   不要写环境感官细节（气味、光线、温度等留给正文发挥），不要写角色心理描写。
+
+2. 章内节奏：
+   用百分比标记情绪/张力走向，一行即可。
+
+3. 关键对话（2-3组）：
+   只标方向和目的，不写具体台词。如：角色A向B坦白秘密 → 目的：暴露B的真实诉求。
+
+4. 结尾钩子：一句话概括本章末尾留下的悬念。
+
+5. 关系推进：一句话概括本章结束时角色关系相比章初的变化。
+
+输出格式（每章之间空一行）：
+
+【第n章细纲】章节标题
+场景分解：
+  场景1（地点）：角色A、角色B — 事件概括（1-3句）
+  场景2（地点）：角色C — 事件概括（1-3句）
+章内节奏：...(0-20%) → ...(20-50%) → ...(50-80%) → ...(80-100%)
+关键对话：
+  · 对话1方向和目的
+  · 对话2方向和目的
+结尾钩子：...
+关系推进：...
+
+要求：
+- 细纲是骨架而非预写，不要包含正文才该有的描写（环境细节、感官、心理活动、具体台词）
+- 场景描述要具体到"发生了什么事"，但不要展开过程细节
+- 必须与蓝图中该章的定位、核心作用等保持一致
+- 与前面已有细纲自然衔接，不要重复已有内容
+- 【硬性字数限制】每章细纲1000-2000字，超出则删减环境和心理描写
+
+仅返回细纲文本，不要解释任何内容。"""
+
+_DEFAULT_PROMPTS["detailed_outline_prompt_detailed"] = """\
+基于以下小说架构和章节蓝图，为第{n}章到第{m}章生成详细的章节细纲。
+
+===== 小说架构 =====
+{novel_architecture}
+
+===== 章节蓝图（第{n}-{m}章） =====
+{chapter_range_blueprints}
+
+===== 已有细纲（供参考衔接） =====
+{existing_outlines}
+
+===== 创作指导 =====
+{user_guidance}
+
+请为每一章生成详细细纲，每章3000-5000字，包含以下内容：
+
+1. 场景分解（本章由哪几个场景组成）：
+   对每个场景写明：
+   - 场景地点/环境氛围（光线、气味、温度、声音等感官细节）
+   - 在场角色及其当前状态
+   - 具体发生的事件和互动（"谁做了什么、说了什么、对方如何反应"级别的描述）
+   - 该场景的情绪氛围与张力
+
+2. 章内节奏曲线：
+   用百分比标记本章的情绪/张力走向。
+
+3. 关键对话要点（2-3组）：
+   写明对话的方向、目的和预期效果。
+
+4. 本章结尾钩子：
+   这一章结束时留下什么悬念或情绪，让读者想继续看下一章。
+
+5. 关系推进：
+   本章结束时角色关系相比章初发生了什么变化。
+
+输出格式（每章之间空一行）：
+
+【第n章细纲】章节标题
+所属弧：...
+场景分解：
+  场景1（地点 - 时间）：
+  - 地点/氛围：...
+  - 在场角色：...
+  - 事件与互动：...
+  - 情绪/张力：...
+  场景2（地点 - 时间）：
+  ...
+章内节奏：...(0-15%) → ...(15-40%) → ...(40-70%) → ...(70-90%) → 收尾...(90-100%)
+关键对话：
+  · 对话1方向和目的
+  · 对话2方向和目的
+结尾钩子：...
+关系推进：...
+
+要求：
+- 场景描述要具体到"发生了什么事"，不要只写"推进关系""加深了解"等笼统表述
+- 必须与蓝图中该章的定位、核心作用等保持一致
+- 与前面已有细纲自然衔接，不要重复已有内容
+- 每章细纲3000-5000字
+
+仅返回细纲文本，不要解释任何内容。"""
+
 # ============================================================
 # 运行时活跃提示词（唯一数据源）
 # ============================================================
@@ -1485,6 +1605,7 @@ narrative_calibration_generate_prompt = _active_prompts["narrative_calibration_g
 narrative_calibration_discriminate_prompt = _active_prompts["narrative_calibration_discriminate_prompt"]
 narrative_calibration_revise_prompt = _active_prompts["narrative_calibration_revise_prompt"]
 brainstorm_system_prompt = _active_prompts["brainstorm_system_prompt"]
+detailed_outline_prompt = _active_prompts["detailed_outline_prompt"]
 
 
 # ============================================================

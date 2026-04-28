@@ -39,6 +39,15 @@ export const configApi = {
     api.delete(`/config/embedding/${encodeURIComponent(name)}`),
   testLLM: () => `/config/llm/test`,
   testEmbedding: () => `/config/embedding/test`,
+  getProxy: () => api.get('/config/proxy'),
+  saveProxy: (data: { proxy_url: string; proxy_port: string; enabled: boolean }) =>
+    api.put('/config/proxy', data),
+  getUserProfile: () => api.get('/config/user_profile'),
+  saveUserProfile: (profile: string, enabled = true) => api.put('/config/user_profile', { profile, enabled }),
+  extractPreferences: (text: string, llm_config_name: string) =>
+    api.post('/config/user_profile/extract', { text, llm_config_name }),
+  appendProfile: (preferences: string) =>
+    api.post('/config/user_profile/append', { preferences }),
 }
 
 // ── Presets ──────────────────────────────────────────────────────────────────
@@ -191,6 +200,11 @@ export const generateApi = {
   humanize: () => `/generate/humanize`,
   batchHumanize: () => `/generate/humanize/batch`,
   reviseStep: () => `/generate/architecture/step/revise`,
+  detailedOutline: () => `/generate/detailed_outline`,
+  getDetailedOutline: (filepath: string) =>
+    api.get(`/generate/detailed_outline`, { params: { filepath } }),
+  saveDetailedOutline: (content: string, filepath: string) =>
+    api.put(`/generate/detailed_outline`, { content, filepath }),
   stepCoreSeed: () => `/generate/architecture/step/core_seed`,
   stepCharacters: () => `/generate/architecture/step/characters`,
   stepWorld: () => `/generate/architecture/step/world`,

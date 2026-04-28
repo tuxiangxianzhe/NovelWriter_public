@@ -29,6 +29,7 @@ def brainstorm_chat(body: BrainstormChatRequest):
             body.include_blueprint,
             body.include_character_state,
             body.extra_context,
+            body.discussion_mode,
         ):
             yield chunk
 

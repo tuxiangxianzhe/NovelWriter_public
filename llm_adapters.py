@@ -667,6 +667,33 @@ class GrokAdapter(BaseLLMAdapter):
             self.max_tokens, self.temperature, self.timeout
         )
 
+def _apply_proxy_settings():
+    """读取 config.json 中的代理设置，注入到环境变量中供 httpx/requests/openai 使用。"""
+    import os, json
+    config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = json.load(f)
+        proxy_cfg = config.get("proxy_setting", {})
+        if proxy_cfg.get("enabled") and proxy_cfg.get("proxy_url"):
+            proxy_url = proxy_cfg["proxy_url"].strip()
+            proxy_port = str(proxy_cfg.get("proxy_port", "")).strip()
+            if not proxy_url.startswith("http"):
+                proxy_url = "http://" + proxy_url
+            if proxy_port:
+                proxy_url = proxy_url.rstrip("/") + ":" + proxy_port
+            os.environ["HTTP_PROXY"] = proxy_url
+            os.environ["HTTPS_PROXY"] = proxy_url
+            os.environ["http_proxy"] = proxy_url
+            os.environ["https_proxy"] = proxy_url
+            logging.info(f"[Proxy] 代理已启用: {proxy_url}")
+        else:
+            for key in ["HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"]:
+                os.environ.pop(key, None)
+    except Exception as e:
+        logging.warning(f"[Proxy] 读取代理配置失败: {e}")
+
+
 def create_llm_adapter(
     interface_format: str,
     base_url: str,
@@ -681,6 +708,7 @@ def create_llm_adapter(
     """
     工厂函数：根据 interface_format 返回不同的适配器实例。
     """
+    _apply_proxy_settings()
     fmt = interface_format.strip().lower()
     if fmt == "deepseek":
         return DeepSeekAdapter(api_key, base_url, model_name, max_tokens, temperature, timeout)

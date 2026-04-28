@@ -2,7 +2,7 @@ import { ref, computed, onMounted, onActivated, onDeactivated, watch } from 'vue
 import { useProjectStore } from '@/stores/project'
 import { useConfigStore } from '@/stores/config'
 import { useGenerateStore } from '@/stores/generate'
-import { postSSE, generateApi, stylesApi, type SSEHandle } from '@/api/client'
+import { postSSE, generateApi, stylesApi, configApi, type SSEHandle } from '@/api/client'
 
 export type StepState = {
   running: boolean
@@ -48,6 +48,16 @@ export function useWorkshopState() {
   // ── 步骤状态 ──────────────────────────────────────────────────────────────
   const arch = ref(mkState())
   const bp = ref(mkState())
+  // 章节细纲
+  const detailedOutline = ref(mkState())
+  const outlineText = ref('')
+  const outlineBatchStart = ref(1)
+  const outlineBatchSize = ref(5)
+  const outlineMode = ref('concise')  // concise / detailed
+  const outlineBatchResult = ref('')
+  const outlineBatchBackup = ref('')
+  const outlineRevisionGuidance = ref('')
+  const outlineRevision = ref(mkState())
   const chapter = ref(mkState())
   const finalize = ref(mkState())
   const expand = ref(mkState())
@@ -84,6 +94,7 @@ export function useWorkshopState() {
   const injectCharToWorld = ref(false)
   // 章节参数
   const injectWorldBuilding = ref(false)
+  const sceneByScene = ref(false)  // 按场景分段生成
   const chapterNum = ref(1)
   const charactersInvolved = ref('')
   const keyItems = ref('')
@@ -131,9 +142,49 @@ export function useWorkshopState() {
 
   // 润色
   const polishGuidance = ref('')
+  const polishMode = ref('enhance')  // enhance / modify / add
+  const polishIncludeOutline = ref(false)
+  const polishIncludeCharState = ref(false)
+  const polishIncludeSummary = ref(false)
+  const polishIncludeWorld = ref(false)
   const expandOriginal = ref('')   // 润色前原文
   const expandNew = ref('')        // 润色后新文
   const expandChapterNum = ref(0)  // 润色的章节号
+
+  // 偏好提取
+  const profileExtracted = ref('')
+  const profileShowConfirm = ref(false)
+  const profileConfirmMsg = ref('')
+
+  async function _tryExtractProfile(text: string) {
+    if (!text || text.length < 10 || !llmConfig.value) return
+    try {
+      const res = await configApi.extractPreferences(text, llmConfig.value)
+      const prefs = res.data.preferences || ''
+      if (prefs) {
+        profileExtracted.value = prefs
+        profileShowConfirm.value = true
+      }
+    } catch { /* 静默 */ }
+  }
+
+  async function profileConfirmAppend() {
+    if (!profileExtracted.value) return
+    try {
+      await configApi.appendProfile(profileExtracted.value)
+      profileConfirmMsg.value = '✅ 已加入画像'
+    } catch {
+      profileConfirmMsg.value = '❌ 保存失败'
+    }
+    profileShowConfirm.value = false
+    profileExtracted.value = ''
+    setTimeout(() => { profileConfirmMsg.value = '' }, 3000)
+  }
+
+  function profileDismiss() {
+    profileShowConfirm.value = false
+    profileExtracted.value = ''
+  }
 
   // 去 AI 痕迹
   const humanize = ref(mkState())
@@ -544,6 +595,7 @@ export function useWorkshopState() {
     const state = (revisionState.value as Record<string, StepState>)[stepType]
     const guidance = (revisionGuidance.value as Record<string, string>)[stepType]
     if (!textRef?.value || !guidance) return
+    _tryExtractProfile(guidance)  // 异步提取偏好
     runStepSSE(state, textRef, generateApi.reviseStep(), {
       llm_config_name: llmConfig.value,
       original_content: textRef.value,
@@ -582,6 +634,122 @@ export function useWorkshopState() {
     })
   }
 
+  // ── Step 2.5: 章节细纲 ───────────────────────────────────────────────────
+  function doGenerateOutlineBatch() {
+    const start = outlineBatchStart.value
+    const end = Math.min(start + outlineBatchSize.value - 1, numChapters.value)
+    const s = detailedOutline.value
+    s.running = true; s.progress = ''; s.result = ''; s.error = ''
+    outlineBatchResult.value = ''
+    const handle = postSSE(
+      generateApi.detailedOutline(),
+      {
+        llm_config_name: llmConfig.value,
+        filepath: filepath.value,
+        start_chapter: start,
+        end_chapter: end,
+        num_chapters: numChapters.value,
+        user_guidance: userGuidance.value,
+        xp_type: xpType.value,
+        outline_mode: outlineMode.value,
+      },
+      (msg, value, content) => { s.progress = msg; if (content) outlineBatchResult.value = content },
+      (content) => {
+        outlineBatchResult.value = content || outlineBatchResult.value
+        loadOutlineText()
+        outlineBatchStart.value = end + 1
+      },
+      (err) => { s.error = err; s.running = false },
+      () => { s.running = false },
+    )
+    s.sseHandle = handle
+  }
+
+  async function loadOutlineText() {
+    try {
+      const res = await generateApi.getDetailedOutline(filepath.value)
+      outlineText.value = res.data.content || ''
+    } catch { /* ignore */ }
+  }
+
+  async function saveOutline() {
+    if (!outlineText.value) return
+    try {
+      await generateApi.saveDetailedOutline(outlineText.value, filepath.value)
+      saveMsg.value = '✅ 细纲已保存'
+    } catch (e: unknown) { saveMsg.value = `❌ ${(e as Error).message}` }
+    setTimeout(() => { saveMsg.value = '' }, 3000)
+  }
+
+  async function saveBatchOutline() {
+    if (!outlineBatchResult.value) return
+    try {
+      await loadOutlineText()
+      const batchChapNums: number[] = []
+      const re = /【第\s*(\d+)\s*章细纲】/g
+      let m
+      while ((m = re.exec(outlineBatchResult.value)) !== null) {
+        batchChapNums.push(parseInt(m[1]))
+      }
+      if (batchChapNums.length > 0) {
+        let fullText = outlineText.value
+        const batchText = outlineBatchResult.value.trim()
+        for (const num of batchChapNums) {
+          const chapterRe = new RegExp(`(【第\\s*${num}\\s*章细纲】[\\s\\S]*?)(?=【第\\s*\\d+\\s*章细纲】|$)`)
+          const newMatch = batchText.match(chapterRe)
+          const newContent = newMatch ? newMatch[1].trim() : ''
+          if (!newContent) continue
+          const existRe = new RegExp(`【第\\s*${num}\\s*章细纲】[\\s\\S]*?(?=【第\\s*\\d+\\s*章细纲】|$)`)
+          if (existRe.test(fullText)) {
+            fullText = fullText.replace(existRe, newContent + '\n\n')
+          } else {
+            fullText = fullText.trim() + '\n\n' + newContent
+          }
+        }
+        outlineText.value = fullText.trim()
+      }
+      await generateApi.saveDetailedOutline(outlineText.value, filepath.value)
+      saveMsg.value = '✅ 本批细纲已保存'
+    } catch (e: unknown) {
+      saveMsg.value = `❌ ${(e as Error).message}`
+    }
+    setTimeout(() => { saveMsg.value = '' }, 3000)
+  }
+
+  function extractChapterToEdit(chapterNum: number) {
+    if (!outlineText.value || chapterNum < 1) return
+    const re = new RegExp(`(【第\\s*${chapterNum}\\s*章细纲】[\\s\\S]*?)(?=【第\\s*\\d+\\s*章细纲】|$)`)
+    const m = outlineText.value.match(re)
+    if (m && m[1]) {
+      outlineBatchResult.value = m[1].trim()
+    } else {
+      outlineBatchResult.value = ''
+    }
+  }
+
+  function revertOutlineBatch() {
+    if (!outlineBatchBackup.value) return
+    outlineBatchResult.value = outlineBatchBackup.value
+    outlineBatchBackup.value = ''
+  }
+
+  function doReviseOutlineBatch() {
+    if (!outlineBatchResult.value || !outlineRevisionGuidance.value) return
+    outlineBatchBackup.value = outlineBatchResult.value
+    const s = outlineRevision.value
+    runStepSSE(s, outlineBatchResult, generateApi.reviseStep(), {
+      llm_config_name: llmConfig.value,
+      original_content: outlineBatchResult.value,
+      revision_guidance: outlineRevisionGuidance.value,
+      step_type: 'plot',
+      filepath: filepath.value,
+      include_core_seed: revisionContext.value.include_core_seed,
+      include_characters: revisionContext.value.include_characters,
+      include_world_building: revisionContext.value.include_world_building,
+      include_plot: revisionContext.value.include_plot,
+    })
+  }
+
   // ── Step 3: 章节 ─────────────────────────────────────────────────────────
   function doGenerateChapter() {
     runSSE(chapter.value, '/generate/chapter', {
@@ -596,6 +764,7 @@ export function useWorkshopState() {
       narrative_style_name: chNarrativeStyle.value === '不使用文风' ? null : chNarrativeStyle.value || null,
       xp_type: xpType.value,
       inject_world_building: injectWorldBuilding.value,
+      scene_by_scene: sceneByScene.value,
     })
   }
 
@@ -633,6 +802,7 @@ export function useWorkshopState() {
     expandOriginal.value = ''
     expandNew.value = ''
     expandChapterNum.value = chapterNum.value
+    if (polishGuidance.value) _tryExtractProfile(polishGuidance.value)  // 异步提取偏好
     const s = expand.value
     s.running = true; s.progress = ''; s.result = ''; s.error = ''; s.progressValue = undefined
     const handle = postSSE(
@@ -643,6 +813,11 @@ export function useWorkshopState() {
         style_name: chStyle.value === '不使用文风' ? null : chStyle.value || null,
         narrative_style_name: chNarrativeStyle.value === '不使用文风' ? null : chNarrativeStyle.value || null,
         xp_type: xpType.value, polish_guidance: polishGuidance.value,
+        polish_mode: polishMode.value,
+        include_outline: polishIncludeOutline.value,
+        include_character_state: polishIncludeCharState.value,
+        include_summary: polishIncludeSummary.value,
+        include_world_building: polishIncludeWorld.value,
       },
       (msg, value, content) => {
         s.progress = msg
@@ -919,7 +1094,7 @@ export function useWorkshopState() {
     // inject options
     injectCharToWorld,
     // chapter params
-    injectWorldBuilding,
+    injectWorldBuilding, sceneByScene,
     chapterNum, charactersInvolved, keyItems, sceneLocation, timeConstraint, chGuidance,
     // batch
     batch,
@@ -938,8 +1113,11 @@ export function useWorkshopState() {
     // character dynamics
     characterDynamicsContent,
     // polish
-    polishGuidance,
+    polishGuidance, polishMode,
+    polishIncludeOutline, polishIncludeCharState, polishIncludeSummary, polishIncludeWorld,
     expandOriginal, expandNew, expandChapterNum, saveExpandResult,
+    // profile extractor
+    profileExtracted, profileShowConfirm, profileConfirmMsg, profileConfirmAppend, profileDismiss,
     // humanizer
     humanize, humanizerBatch, humanizerR8, humanizerFocus,
     humanizerStart, humanizerEnd, humanizerDepth,
@@ -954,7 +1132,12 @@ export function useWorkshopState() {
     saveComponent, saveCoreSeed, saveCharDynamics, saveCharState, saveWorldBuilding, savePlotArch,
     revisionGuidance, revisionState, revisionContext, doRevise,
     doGenerateArch, doStepSeed, doStepChar, doStepCharState, doStepWorld, doStepPlot, doAssemble,
-    doGenerateBP, doGenerateChapter, doFinalize,
+    doGenerateBP,
+    detailedOutline, outlineText, outlineBatchStart, outlineBatchSize, outlineMode,
+    outlineBatchResult, outlineBatchBackup, outlineRevisionGuidance, outlineRevision,
+    doGenerateOutlineBatch, loadOutlineText, saveOutline, saveBatchOutline,
+    doReviseOutlineBatch, revertOutlineBatch, extractChapterToEdit,
+    doGenerateChapter, doFinalize,
     doBatchGenerate, doExpand, doExportNovel,
     doContinueArch, doContStepSeed, doContStepWorld, doContStepChars, doContStepArcs, doContStepCharState, doContAssemble,
     compressRunning, compressResult, compressWorldBuilding, doCompressContext,

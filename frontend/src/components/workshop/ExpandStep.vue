@@ -6,6 +6,12 @@ import StepCard from '@/components/StepCard.vue'
 
 const props = defineProps<{ state: ReturnType<typeof useWorkshopState> }>()
 
+const polishModes = [
+  { value: 'enhance', label: '通用润色', desc: '对关键场景进行感官细节、心理刻画、动作细化等全面扩写' },
+  { value: 'modify', label: '修改剧情', desc: '根据建议修改指定段落的剧情内容，其余部分保持不变' },
+  { value: 'add', label: '增加内容', desc: '在指定位置补充新内容，不删减原有内容' },
+]
+
 // ── paragraph-aligned diff ──
 
 /** Split text into paragraphs (by blank lines) preserving trailing newlines */
@@ -153,10 +159,51 @@ function saveEdit() {
   <StepCard :step="5" title="场景润色" description="对章节进行深度润色，增强细节与氛围">
     <div class="space-y-3">
       <p class="text-sm text-[var(--color-ink-light)]">对第 <strong>{{ state.chapterNum.value }}</strong> 章进行场景润色（章节号与步骤3联动）。</p>
+
+      <!-- 润色模式 -->
+      <div>
+        <label class="block text-xs text-[var(--color-ink-light)] mb-1">润色模式</label>
+        <div class="flex gap-1 flex-wrap">
+          <button v-for="m in polishModes" :key="m.value"
+            @click="state.polishMode.value = m.value" :title="m.desc"
+            class="px-2.5 py-1 rounded text-xs transition-colors"
+            :class="state.polishMode.value === m.value
+              ? 'bg-[var(--color-leather)] text-[var(--color-parchment)]'
+              : 'bg-[var(--color-parchment-dark)] text-[var(--color-ink-light)] hover:bg-[var(--color-parchment-darker)]'"
+            type="button">{{ m.label }}</button>
+        </div>
+        <p class="text-xs text-[var(--color-ink-light)] mt-1">{{ polishModes.find(m => m.value === state.polishMode.value)?.desc }}</p>
+      </div>
+
+      <!-- 注入上下文 -->
+      <div>
+        <label class="block text-xs text-[var(--color-ink-light)] mb-1">注入上下文（可选）</label>
+        <div class="flex flex-wrap gap-x-4 gap-y-1">
+          <label class="inline-flex items-center gap-1 text-xs cursor-pointer">
+            <input type="checkbox" v-model="state.polishIncludeOutline.value" class="rounded" />细纲
+          </label>
+          <label class="inline-flex items-center gap-1 text-xs cursor-pointer">
+            <input type="checkbox" v-model="state.polishIncludeCharState.value" class="rounded" />角色状态
+          </label>
+          <label class="inline-flex items-center gap-1 text-xs cursor-pointer">
+            <input type="checkbox" v-model="state.polishIncludeSummary.value" class="rounded" />前文摘要
+          </label>
+          <label class="inline-flex items-center gap-1 text-xs cursor-pointer">
+            <input type="checkbox" v-model="state.polishIncludeWorld.value" class="rounded" />世界观
+          </label>
+        </div>
+      </div>
+
+      <!-- 润色建议 -->
       <div>
         <label class="block text-xs text-[var(--color-ink-light)] mb-1">润色建议（可选）</label>
-        <textarea v-model="state.polishGuidance.value" rows="3" placeholder="例如：加强环境描写、增加角色心理活动、丰富对话细节…" class="w-full border border-[var(--color-parchment-darker)] rounded-md px-3 py-2 text-sm resize-y" />
+        <textarea v-model="state.polishGuidance.value" rows="3"
+          :placeholder="state.polishMode.value === 'modify' ? '请描述要修改哪段剧情、改成什么样…'
+            : state.polishMode.value === 'add' ? '请描述要在哪里增加什么内容…'
+            : '例如：加强环境描写、增加角色心理活动、丰富对话细节…'"
+          class="w-full border border-[var(--color-parchment-darker)] rounded-md px-3 py-2 text-sm resize-y" />
       </div>
+
       <div class="flex justify-end">
         <button @click="state.doExpand()" :disabled="state.expand.value.running || !state.llmConfig.value" class="btn-primary" type="button">
           {{ state.expand.value.running ? '润色中…' : '▶ 场景润色' }}

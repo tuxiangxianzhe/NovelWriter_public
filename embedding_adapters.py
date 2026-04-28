@@ -312,6 +312,10 @@ def create_embedding_adapter(
     """
     工厂函数：根据 interface_format 返回不同的 embedding 适配器实例（带缓存）
     """
+    # 应用代理设置
+    from llm_adapters import _apply_proxy_settings
+    _apply_proxy_settings()
+
     cache_key = (interface_format.strip().lower(), api_key, base_url, model_name)
     if cache_key in _adapter_cache:
         return _adapter_cache[cache_key]

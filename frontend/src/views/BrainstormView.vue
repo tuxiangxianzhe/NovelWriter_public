@@ -4,6 +4,8 @@ import { postSSE } from '@/api/client'
 import { brainstormApi } from '@/api/client'
 import { useConfigStore } from '@/stores/config'
 import { useProjectStore } from '@/stores/project'
+import { useProfileExtractor } from '@/composables/useProfileExtractor'
+import ProfileExtractBar from '@/components/ProfileExtractBar.vue'
 
 interface ChatMessage {
   role: 'user' | 'assistant'
@@ -29,6 +31,17 @@ const includeBlueprint = ref(false)
 const includeCharacterState = ref(false)
 const extraContext = ref('')
 const showSettings = ref(false)
+const profiler = useProfileExtractor()
+
+// Discussion mode
+const discussionMode = ref('advisor')
+const modeOptions = [
+  { value: 'casual', label: '轻松闲聊', desc: '像朋友聊天，简短随意' },
+  { value: 'advisor', label: '专业顾问', desc: '结构化建议，详细分析' },
+  { value: 'brainstorm', label: '头脑风暴', desc: '多角色视角，观点碰撞' },
+  { value: 'devil', label: '魔鬼代言人', desc: '挑战想法，找出弱点' },
+  { value: 'roleplay', label: '角色扮演', desc: '以小说角色身份对话' },
+]
 
 const canSend = computed(() => userInput.value.trim() && llmConfig.value && !streaming.value)
 
@@ -43,6 +56,9 @@ function scrollToBottom() {
 function sendMessage() {
   const text = userInput.value.trim()
   if (!text || streaming.value) return
+
+  // 异步提取偏好（不阻塞发送）
+  profiler.tryExtract(text, llmConfig.value)
 
   messages.value.push({ role: 'user', content: text })
   userInput.value = ''
@@ -64,6 +80,7 @@ function sendMessage() {
       include_blueprint: includeBlueprint.value,
       include_character_state: includeCharacterState.value,
       extra_context: extraContext.value,
+      discussion_mode: discussionMode.value,
     },
     (_msg, _value, content) => {
       if (content) {
@@ -110,7 +127,21 @@ onMounted(async () => {
   <div class="flex flex-col h-[calc(100vh-120px)] max-w-4xl mx-auto px-4 py-4">
     <!-- Header -->
     <div class="flex items-center justify-between mb-3">
-      <h2 class="text-2xl font-bold" style="color: var(--color-ink)">💡 创意讨论</h2>
+      <div class="flex items-center gap-3">
+        <h2 class="text-2xl font-bold" style="color: var(--color-ink)">💡 创意讨论</h2>
+        <div class="flex gap-1">
+          <button
+            v-for="m in modeOptions" :key="m.value"
+            @click="discussionMode = m.value"
+            :title="m.desc"
+            class="px-2 py-1 rounded text-xs transition-colors"
+            :class="discussionMode === m.value
+              ? 'bg-[var(--color-leather)] text-[var(--color-parchment)]'
+              : 'bg-[var(--color-parchment-dark)] text-[var(--color-ink-light)] hover:bg-[var(--color-parchment-darker)]'"
+            type="button"
+          >{{ m.label }}</button>
+        </div>
+      </div>
       <div class="flex items-center gap-2">
         <button
           @click="showSettings = !showSettings"
@@ -144,6 +175,15 @@ onMounted(async () => {
               class="w-full border border-[var(--color-parchment-darker)] rounded-md px-3 py-2 text-sm"
             >
               <option v-for="c in configStore.llmChoices" :key="c" :value="c">{{ c }}</option>
+            </select>
+          </div>
+          <div class="flex-1 min-w-[200px]">
+            <label class="block text-xs text-[var(--color-ink-light)] mb-1">讨论模式</label>
+            <select
+              v-model="discussionMode"
+              class="w-full border border-[var(--color-parchment-darker)] rounded-md px-3 py-2 text-sm"
+            >
+              <option v-for="m in modeOptions" :key="m.value" :value="m.value">{{ m.label }} — {{ m.desc }}</option>
             </select>
           </div>
         </div>
@@ -202,7 +242,7 @@ onMounted(async () => {
       >
         <span class="text-4xl mb-3">💡</span>
         <p class="text-sm">在下方输入你的创作想法、疑问或需要讨论的方向</p>
-        <p class="text-xs mt-1">AI 将基于你的小说项目上下文提供创意建议</p>
+        <p class="text-xs mt-1">当前模式：<strong>{{ modeOptions.find(m => m.value === discussionMode)?.label }}</strong> — {{ modeOptions.find(m => m.value === discussionMode)?.desc }}</p>
       </div>
 
       <!-- Messages -->
@@ -240,6 +280,15 @@ onMounted(async () => {
         </div>
       </div>
     </div>
+
+    <!-- 偏好提取确认 -->
+    <ProfileExtractBar
+      :show="profiler.showConfirm.value"
+      :preferences="profiler.extractedPrefs.value"
+      :confirm-msg="profiler.confirmMsg.value"
+      @confirm="profiler.confirmAppend()"
+      @dismiss="profiler.dismissExtract()"
+    />
 
     <!-- Input Area -->
     <div class="mt-3 flex gap-2">

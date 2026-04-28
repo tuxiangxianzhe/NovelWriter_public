@@ -17,7 +17,7 @@ from api.schemas import (
     FinalizeChapterRequest, ExpandScenesRequest, SaveChapterRequest,
     SaveContentRequest, GenerateCharStateRequest, BatchGenerateRequest,
     SupplementCharactersRequest, HumanizerRequest, BatchHumanizerRequest,
-    ReviseStepRequest,
+    ReviseStepRequest, GenerateDetailedOutlineRequest,
 )
 from pydantic import BaseModel as _BaseModel
 from api.app_state import get_web_app
@@ -376,6 +376,41 @@ def generate_blueprint(body: GenerateBlueprintRequest):
     return _sse_response(_gen())
 
 
+# ── 详细细纲 ──────────────────────────────────────────────────────────────────
+
+@router.post("/generate/detailed_outline")
+def generate_detailed_outline(body: GenerateDetailedOutlineRequest):
+    app = get_web_app()
+
+    async def _gen():
+        async for chunk in run_with_sse(
+            app.generate_detailed_outline,
+            body.llm_config_name, body.filepath,
+            body.start_chapter, body.end_chapter, body.num_chapters,
+            body.user_guidance, body.xp_type, body.outline_mode,
+        ):
+            yield chunk
+
+    return _sse_response(_gen())
+
+
+@router.get("/generate/detailed_outline")
+def get_detailed_outline(filepath: str = "./output"):
+    outline_file = os.path.join(filepath, "Novel_detailed_outline.txt")
+    if os.path.exists(outline_file):
+        content = read_file(outline_file)
+        return {"content": content}
+    return {"content": ""}
+
+
+@router.put("/generate/detailed_outline")
+def save_detailed_outline(body: SaveContentRequest):
+    outline_file = os.path.join(body.filepath, "Novel_detailed_outline.txt")
+    os.makedirs(os.path.dirname(outline_file) if os.path.dirname(outline_file) else ".", exist_ok=True)
+    save_string_to_txt(body.content, outline_file)
+    return {"message": "✅ 章节细纲已保存"}
+
+
 # ── 章节生成 ──────────────────────────────────────────────────────────────────
 
 @router.post("/generate/chapter")
@@ -390,7 +425,7 @@ def generate_chapter(body: GenerateChapterRequest):
             body.characters_involved, body.key_items,
             body.scene_location, body.time_constraint,
             body.style_name, body.narrative_style_name, body.xp_type,
-            body.inject_world_building,
+            body.inject_world_building, body.scene_by_scene,
         ):
             yield chunk
 
@@ -510,7 +545,9 @@ def expand_scenes(body: ExpandScenesRequest):
             app.expand_scenes_web,
             body.llm_config_name, body.filepath, body.chapter_num,
             body.style_name, body.narrative_style_name, body.xp_type,
-            body.polish_guidance,
+            body.polish_guidance, body.polish_mode,
+            body.include_outline, body.include_character_state,
+            body.include_summary, body.include_world_building,
         ):
             yield chunk
 
@@ -649,16 +686,22 @@ def export_novel(filepath: str = "./output"):
         except Exception:
             pass
 
-    # 合并
+    # 合并：优先使用章节内容自带的标题，没有时才补上
     parts = []
     for num in sorted(chapter_nums):
         chapter_file = os.path.join(chapters_dir, f"chapter_{num}.txt")
         if not os.path.exists(chapter_file):
             continue
-        title = chapter_titles.get(num, "")
-        header = f"第{num}章" + (f" - {title}" if title else "")
-        content = read_file(chapter_file)
-        parts.append(f"{header}\n\n{content}")
+        content = read_file(chapter_file).strip()
+        # 检查内容前几行是否已包含章节标题（如"第N章"、"第N章 标题"等）
+        first_line = content.split('\n', 1)[0].strip() if content else ""
+        has_title = bool(re.match(r'^第\s*\d+\s*章', first_line))
+        if has_title:
+            parts.append(content)
+        else:
+            title = chapter_titles.get(num, "")
+            header = f"第{num}章" + (f" - {title}" if title else "")
+            parts.append(f"{header}\n\n{content}")
 
     if not parts:
         raise HTTPException(status_code=404, detail="未找到任何已保存的章节")

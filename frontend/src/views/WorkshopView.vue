@@ -3,11 +3,13 @@ import { useWorkshopState } from '@/composables/useWorkshopState'
 import GlobalParamsCard from '@/components/workshop/GlobalParamsCard.vue'
 import ArchitectureStep from '@/components/workshop/ArchitectureStep.vue'
 import BlueprintStep from '@/components/workshop/BlueprintStep.vue'
+import DetailedOutlineStep from '@/components/workshop/DetailedOutlineStep.vue'
 import ChapterStep from '@/components/workshop/ChapterStep.vue'
 import BatchGenerate from '@/components/workshop/BatchGenerate.vue'
 import FinalizeStep from '@/components/workshop/FinalizeStep.vue'
 import ExpandStep from '@/components/workshop/ExpandStep.vue'
 import HumanizerStep from '@/components/workshop/HumanizerStep.vue'
+import ProfileExtractBar from '@/components/ProfileExtractBar.vue'
 import '@/styles/workshop.css'
 
 const state = useWorkshopState()
@@ -35,9 +37,18 @@ const state = useWorkshopState()
       </div>
     </Transition>
 
+    <ProfileExtractBar
+      :show="state.profileShowConfirm.value"
+      :preferences="state.profileExtracted.value"
+      :confirm-msg="state.profileConfirmMsg.value"
+      @confirm="state.profileConfirmAppend()"
+      @dismiss="state.profileDismiss()"
+    />
+
     <GlobalParamsCard :state="state" />
     <ArchitectureStep :state="state" />
     <BlueprintStep :state="state" />
+    <DetailedOutlineStep :state="state" />
     <ChapterStep :state="state" />
     <BatchGenerate :state="state" />
     <FinalizeStep :state="state" />

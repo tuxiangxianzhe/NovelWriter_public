@@ -58,6 +58,12 @@ const router = createRouter({
       meta: { title: '创意讨论' },
     },
     {
+      path: '/profile',
+      name: 'profile',
+      component: () => import('@/views/ProfileView.vue'),
+      meta: { title: '用户画像' },
+    },
+    {
       path: '/logs',
       name: 'logs',
       component: () => import('@/views/LogsView.vue'),

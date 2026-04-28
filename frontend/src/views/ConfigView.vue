@@ -159,7 +159,42 @@ async function deleteEmb() {
   }
 }
 
-onMounted(() => configStore.loadAll())
+// ── 代理设置 ─────────────────────────────────────────────────────────────────
+const proxyUrl = ref('')
+const proxyPort = ref('')
+const proxyEnabled = ref(false)
+const proxySaving = ref(false)
+const proxyMsg = ref('')
+
+async function loadProxy() {
+  try {
+    const res = await configApi.getProxy()
+    proxyUrl.value = res.data.proxy_url || ''
+    proxyPort.value = res.data.proxy_port || ''
+    proxyEnabled.value = res.data.enabled || false
+  } catch { /* ignore */ }
+}
+
+async function saveProxy() {
+  proxySaving.value = true
+  try {
+    await configApi.saveProxy({
+      proxy_url: proxyUrl.value,
+      proxy_port: proxyPort.value,
+      enabled: proxyEnabled.value,
+    })
+    proxyMsg.value = '✅ 代理设置已保存'
+  } catch (e: unknown) {
+    proxyMsg.value = `❌ ${(e as Error).message}`
+  }
+  proxySaving.value = false
+  setTimeout(() => { proxyMsg.value = '' }, 3000)
+}
+
+onMounted(() => {
+  configStore.loadAll()
+  loadProxy()
+})
 </script>
 
 <template>
@@ -335,5 +370,40 @@ onMounted(() => configStore.loadAll())
         </div>
       </div>
     </div>
+
+    <!-- ── 代理设置 ── -->
+    <div class="rounded-xl border border-[var(--color-parchment-darker)] bg-white overflow-hidden">
+      <div class="px-4 py-3 bg-[var(--color-parchment)] border-b border-[var(--color-parchment-darker)] flex items-center justify-between">
+        <h3 class="text-lg font-semibold" style="color: var(--color-leather)">🌐 网络代理</h3>
+        <label class="inline-flex items-center gap-2 cursor-pointer shrink-0">
+          <input type="checkbox" v-model="proxyEnabled" class="rounded border-[var(--color-parchment-darker)]" />
+          <span class="text-sm" :class="proxyEnabled ? 'text-green-700 font-medium' : 'text-[var(--color-ink-light)]'">{{ proxyEnabled ? '已启用' : '已禁用' }}</span>
+        </label>
+      </div>
+      <div class="p-4 space-y-3">
+        <p class="text-xs text-[var(--color-ink-light)]">为 LLM 和 Embedding 请求配置 HTTP 代理。适用于需要翻墙或走内网代理的网络环境。</p>
+        <div class="flex gap-3">
+          <div class="flex-1">
+            <label class="block text-xs text-[var(--color-ink-light)] mb-1">代理地址</label>
+            <input v-model="proxyUrl" placeholder="例如：127.0.0.1 或 http://proxy.example.com" class="w-full border border-[var(--color-parchment-darker)] rounded-md px-3 py-2 text-sm" />
+          </div>
+          <div class="w-32">
+            <label class="block text-xs text-[var(--color-ink-light)] mb-1">端口</label>
+            <input v-model="proxyPort" placeholder="例如：7890" class="w-full border border-[var(--color-parchment-darker)] rounded-md px-3 py-2 text-sm" />
+          </div>
+        </div>
+        <div class="flex items-center justify-between">
+          <span v-if="proxyMsg" class="text-xs" :class="proxyMsg.startsWith('✅') ? 'text-green-600' : 'text-red-500'">{{ proxyMsg }}</span>
+          <span v-else class="text-xs text-[var(--color-ink-light)]">保存后立即生效，对所有 LLM 和 Embedding 请求生效</span>
+          <button @click="saveProxy" :disabled="proxySaving"
+            class="px-4 py-2 rounded-md text-sm font-semibold text-white disabled:opacity-40 transition-colors"
+            style="background-color: var(--color-leather)"
+            type="button">
+            {{ proxySaving ? '保存中...' : '保存代理设置' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
   </div>
 </template>

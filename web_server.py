@@ -395,6 +395,7 @@ class NovelGeneratorWeb:
                         characters_involved, key_items, scene_location,
                         time_constraint, style_name, narrative_style_name=None,
                         xp_type="", inject_world_building=False,
+                        scene_by_scene=False,
                         progress=gr.Progress()):
         """生成章节草稿"""
         try:
@@ -455,6 +456,7 @@ class NovelGeneratorWeb:
                     inject_world_building=inject_world_building,
                     author_style_name=style_name if style_name else "",
                     styles_dir=self.get_styles_dir(),
+                    scene_by_scene=scene_by_scene,
                     progress=progress,
                     enable_streaming=llm_conf.get("enable_streaming", True),
                 )
@@ -526,9 +528,54 @@ class NovelGeneratorWeb:
             logging.error(f"定稿失败: {str(e)}")
             return f"❌ 定稿失败: {str(e)}"
 
+    def generate_detailed_outline(self, llm_config_name, filepath,
+                                  start_chapter, end_chapter, num_chapters,
+                                  user_guidance, xp_type="", outline_mode="concise",
+                                  progress=gr.Progress()):
+        """生成一批章节的详细细纲"""
+        try:
+            progress(0, desc=f"准备生成第{start_chapter}-{end_chapter}章细纲...")
+
+            if not llm_config_name or llm_config_name not in self.config.get("llm_configs", {}):
+                return "❌ 请先选择有效的 LLM 配置"
+
+            llm_conf = self.config["llm_configs"][llm_config_name]
+            effective_guidance = self._build_xp_guidance(xp_type, user_guidance)
+
+            from novel_generator.detailed_outline import generate_detailed_outline_batch
+            result = generate_detailed_outline_batch(
+                interface_format=llm_conf["interface_format"],
+                api_key=llm_conf["api_key"],
+                base_url=llm_conf["base_url"],
+                llm_model=llm_conf["model_name"],
+                filepath=filepath,
+                start_chapter=int(start_chapter),
+                end_chapter=int(end_chapter),
+                number_of_chapters=int(num_chapters),
+                user_guidance=effective_guidance,
+                temperature=llm_conf["temperature"],
+                max_tokens=llm_conf["max_tokens"],
+                timeout=llm_conf["timeout"],
+                enable_thinking=llm_conf.get("enable_thinking", False),
+                thinking_budget=llm_conf.get("thinking_budget", 0),
+                outline_mode=outline_mode,
+                progress=progress,
+            )
+
+            return result
+
+        except Exception as e:
+            logging.error(f"生成细纲失败: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return f"❌ 生成细纲失败: {str(e)}"
+
     def expand_scenes_web(self, llm_config_name, filepath, chapter_num,
                           style_name, narrative_style_name=None, xp_type="",
-                          polish_guidance="", progress=gr.Progress()):
+                          polish_guidance="", polish_mode="enhance",
+                          inc_outline=False, inc_char_state=False,
+                          inc_summary=False, inc_world=False,
+                          progress=gr.Progress()):
         """场景扩写"""
         try:
             progress(0, desc=f"准备对第 {chapter_num} 章进行场景扩写...")
@@ -566,7 +613,35 @@ class NovelGeneratorWeb:
             narrative_instr = self.get_narrative_instructions(narrative_style_name)
             narrative_for_ch = narrative_instr.get("for_chapter", "")
 
-            progress(0.3, desc="场景扩写中...")
+            # 收集可选上下文
+            context_parts = []
+            if inc_outline:
+                outline_file = os.path.join(filepath, "Novel_detailed_outline.txt")
+                if os.path.exists(outline_file):
+                    try:
+                        from novel_generator.detailed_outline import get_chapter_outline
+                        outline_text = read_file(outline_file)
+                        ch_outline = get_chapter_outline(outline_text, int(chapter_num))
+                        if ch_outline:
+                            context_parts.append(f"【本章细纲】\n{ch_outline}")
+                    except ImportError:
+                        pass
+            if inc_char_state:
+                text = read_character_state(filepath)
+                if text:
+                    context_parts.append(f"【角色状态】\n{text}")
+            if inc_summary:
+                summary_file = os.path.join(filepath, "global_summary.txt")
+                text = read_file(summary_file).strip() if os.path.exists(summary_file) else ""
+                if text:
+                    context_parts.append(f"【前文摘要】\n{text}")
+            if inc_world:
+                text = read_world_building(filepath)
+                if text:
+                    context_parts.append(f"【世界观设定】\n{text}")
+            extra_context = "\n\n".join(context_parts) if context_parts else ""
+
+            progress(0.3, desc="场景润色中...")
 
             expanded_text = expand_scenes(
                 chapter_text=chapter_text,
@@ -581,6 +656,8 @@ class NovelGeneratorWeb:
                 writing_style=writing_style,
                 narrative_instruction=narrative_for_ch,
                 polish_guidance=polish_guidance,
+                polish_mode=polish_mode,
+                extra_context=extra_context,
                 progress=progress
             )
 
@@ -980,6 +1057,7 @@ class NovelGeneratorWeb:
     def brainstorm_chat(self, llm_config_name, filepath, messages,
                         inc_seed, inc_chars, inc_world, inc_plot,
                         inc_bp, inc_state, extra_context,
+                        discussion_mode="advisor",
                         progress=gr.Progress()):
         """创意讨论：多轮对话头脑风暴"""
         import uuid
@@ -1023,12 +1101,69 @@ class NovelGeneratorWeb:
                 if text:
                     context_parts.append(f"【角色状态】\n{text}")
 
-            # 从当前激活的预设方案读取创意讨论系统提示
+            # 根据讨论模式选择系统提示
             preset_name = prompt_definitions.get_active_preset_name()
-            system_message = prompt_definitions.get_all_prompts().get(
-                "brainstorm_system_prompt",
-                "你是一位资深的小说创作顾问和头脑风暴伙伴。请与用户进行深入的创意讨论。"
-            )
+            preset_persona = f"你们讨论的是「{preset_name}」类型的小说创作。"
+
+            _BRAINSTORM_MODE_PROMPTS = {
+                "casual": (
+                    "你是用户的创作聊友。用轻松、随意的语气和用户聊天，像朋友之间闲聊一样。\n\n"
+                    f"背景：{preset_persona}\n\n"
+                    "规则：\n"
+                    "- 回复简短自然，一般 2-5 句话，除非用户明确要求展开\n"
+                    "- 不要主动列清单、分条目、给结构化建议\n"
+                    "- 可以开玩笑、吐槽、表达个人偏好\n"
+                    "- 用户问什么聊什么，不要过度延伸\n"
+                    "- 能跟上用户的思路和兴奋点，像一个同好在聊天"
+                ),
+                "advisor": None,  # 使用预设中的默认 brainstorm_system_prompt
+                "brainstorm": (
+                    "你是一个由多位虚拟角色组成的头脑风暴小组。每次回复时，你需要扮演 2-3 个不同身份的角色，"
+                    "从各自的专业视角给出观点。角色之间可以互相补充，也可以互相反驳。\n\n"
+                    f"背景：{preset_persona}\n\n"
+                    "常驻角色池（每次从中选 2-3 个最相关的）：\n"
+                    "- 【资深编辑】关注市场性、可读性、节奏感，语气务实直接\n"
+                    "- 【文学评论家】关注主题深度、叙事技巧、文学价值，语气学术犀利\n"
+                    "- 【狂热读者】代表目标受众，关注爽点、代入感、追更欲望，语气热情感性\n"
+                    "- 【编剧顾问】关注戏剧冲突、场景画面感、对话张力，语气画面导向\n"
+                    "- 【同行作者】关注技术实现、写作难度、经验教训，语气同行共鸣\n\n"
+                    "格式要求：\n"
+                    "- 每个角色用【角色名】开头，各角色之间空一行\n"
+                    "- 每个角色的发言保持 3-5 句话，观点鲜明\n"
+                    "- 至少有一处角色之间的观点碰撞或互补"
+                ),
+                "devil": (
+                    "你是一位\"魔鬼代言人\"——专门挑战用户创意的批评者。\n"
+                    "你的职责是找出用户想法中的弱点、漏洞、不合理之处和潜在风险。\n\n"
+                    f"背景：{preset_persona}\n\n"
+                    "规则：\n"
+                    "- 对每个想法，先指出 1-2 个核心问题或薄弱环节\n"
+                    "- 用目标读者视角提出质疑：\"这类小说的读者读到这里会不会觉得...？\"\n"
+                    "- 指出问题后，给出一个改进方向（但不要展开，让用户自己思考）\n"
+                    "- 语气尖锐但不恶意，是严格的合作者而非否定者\n"
+                    "- 如果用户的想法确实很好，简短认可后追问能否更好"
+                ),
+                "roleplay": (
+                    "你将扮演用户小说项目中的角色，以该角色的身份、性格、语气与用户对话。\n\n"
+                    f"背景：{preset_persona}\n\n"
+                    "规则：\n"
+                    "- 根据用户指定的角色名（或从上下文推断最相关的角色）进入角色\n"
+                    "- 完全以该角色的第一人称视角回应，保持角色性格一致\n"
+                    "- 说话方式、用词、态度都要符合该角色的设定\n"
+                    "- 如果用户讨论剧情走向，从角色自身的立场和动机出发回应\n"
+                    "- 如果用户没有指定角色，询问用户想和哪个角色对话\n"
+                    "- 角色不知道的超出故事视野的信息，就表示不知道"
+                ),
+            }
+            mode_prompt = _BRAINSTORM_MODE_PROMPTS.get(discussion_mode)
+            if mode_prompt is None:
+                # advisor 模式：使用预设中的默认 brainstorm_system_prompt
+                system_message = prompt_definitions.get_all_prompts().get(
+                    "brainstorm_system_prompt",
+                    "你是一位资深的小说创作顾问和头脑风暴伙伴。请与用户进行深入的创意讨论。"
+                )
+            else:
+                system_message = mode_prompt + "\n\n请基于以下小说项目的已有资料进行对话。"
 
             if context_parts:
                 system_message += "\n\n--- 小说项目资料 ---\n\n" + "\n\n".join(context_parts)
@@ -1376,15 +1511,37 @@ class NovelGeneratorWeb:
 
     # ---- 分步架构生成方法 ----
 
-    @staticmethod
-    def _build_xp_guidance(xp_type: str, base_guidance: str) -> str:
-        """将 XP 类型前置到创作指导中，使其在所有生成阶段优先生效。"""
+    def _get_user_profile_block(self) -> str:
+        """读取全局用户画像，返回可注入prompt的文本块。未启用或无画像则返回空字符串。"""
+        profile_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "user_profile.json")
+        if os.path.exists(profile_path):
+            try:
+                import json as _json
+                with open(profile_path, "r", encoding="utf-8") as f:
+                    data = _json.load(f)
+                if not data.get("enabled", True):
+                    return ""
+                profile = data.get("profile", "").strip()
+                if profile:
+                    return f"\n【用户偏好画像（请在内容设计中尊重以下偏好）】\n{profile}\n"
+            except Exception:
+                pass
+        return ""
+
+    def _build_xp_guidance(self, xp_type: str, base_guidance: str) -> str:
+        """将 XP 类型和用户画像前置到创作指导中，使其在所有生成阶段优先生效。"""
         xp_type = (xp_type or "").strip()
         base_guidance = (base_guidance or "").strip()
-        if not xp_type:
-            return base_guidance
-        prefix = f"【XP类型/核心玩法】{xp_type}"
-        return f"{prefix}\n\n{base_guidance}" if base_guidance else prefix
+        parts = []
+        if xp_type:
+            parts.append(f"【XP类型/核心玩法】{xp_type}")
+        # 注入用户画像
+        profile_block = self._get_user_profile_block()
+        if profile_block:
+            parts.append(profile_block)
+        if base_guidance:
+            parts.append(base_guidance)
+        return "\n\n".join(parts) if parts else ""
 
     def _update_project_chapters(self, filepath: str, added_chapters: int):
         """续写后自动更新项目总章节数，返回新总数。若找不到项目则返回 None。"""
