@@ -18,6 +18,9 @@ from api.schemas import (
     SaveContentRequest, GenerateCharStateRequest, BatchGenerateRequest,
     SupplementCharactersRequest, HumanizerRequest, BatchHumanizerRequest,
     ReviseStepRequest, GenerateDetailedOutlineRequest,
+    GenerateBlueprintSingleRequest, GenerateOutlineSingleRequest,
+    GenerateChapterImprovRequest, SaveSingleContentRequest,
+    ReviseBlueprintSingleRequest, ReviseOutlineSingleRequest,
 )
 from pydantic import BaseModel as _BaseModel
 from api.app_state import get_web_app
@@ -52,6 +55,37 @@ def _sse_response(gen):
             "X-Accel-Buffering": "no",
         },
     )
+
+
+def _get_workflow_mode(filepath: str) -> str:
+    """读取项目工作流模式。无配置文件则返回 outlined。"""
+    import json
+    cfg_path = os.path.join(filepath, "project_config.json")
+    if os.path.exists(cfg_path):
+        try:
+            with open(cfg_path, "r", encoding="utf-8") as f:
+                return json.load(f).get("workflow_mode", "outlined")
+        except Exception:
+            return "outlined"
+    return "outlined"
+
+
+def _require_outlined_mode(filepath: str, action: str) -> None:
+    """全书规划类操作的兜底：即兴模式拒绝"""
+    if _get_workflow_mode(filepath) == "improv":
+        raise HTTPException(
+            status_code=409,
+            detail=f"当前项目处于即兴模式（improv），不允许执行「{action}」。请切换到大纲模式（outlined）后重试。",
+        )
+
+
+def _require_improv_mode(filepath: str, action: str) -> None:
+    """即兴模式专用操作的兜底：大纲模式拒绝"""
+    if _get_workflow_mode(filepath) != "improv":
+        raise HTTPException(
+            status_code=409,
+            detail=f"当前项目处于大纲模式（outlined），不允许执行「{action}」。请切换到即兴模式（improv）后重试。",
+        )
 
 
 # ── 完整架构生成 ──────────────────────────────────────────────────────────────
@@ -363,6 +397,7 @@ def compress_context(body: CompressContextRequest):
 
 @router.post("/generate/blueprint")
 def generate_blueprint(body: GenerateBlueprintRequest):
+    _require_outlined_mode(body.filepath, "生成全书章节蓝图")
     app = get_web_app()
 
     async def _gen():
@@ -380,6 +415,7 @@ def generate_blueprint(body: GenerateBlueprintRequest):
 
 @router.post("/generate/detailed_outline")
 def generate_detailed_outline(body: GenerateDetailedOutlineRequest):
+    _require_outlined_mode(body.filepath, "生成全书章节细纲")
     app = get_web_app()
 
     async def _gen():
@@ -650,6 +686,145 @@ def save_character_dynamics_endpoint(body: SaveContentRequest):
     os.makedirs(os.path.dirname(cd_file), exist_ok=True)
     save_string_to_txt(body.content, cd_file)
     return {"message": "✅ 角色动力学已保存"}
+
+
+# ── 即兴写作模式（improv） ────────────────────────────────────────────────────
+
+@router.get("/generate/workflow_mode")
+def get_workflow_mode(filepath: str = "./output"):
+    """读取当前项目的工作流模式（outlined / improv）"""
+    return {"workflow_mode": _get_workflow_mode(filepath)}
+
+
+@router.post("/generate/blueprint_single")
+def generate_blueprint_single(body: GenerateBlueprintSingleRequest):
+    """即兴模式·按章生成单章蓝图（不直接保存，前端确认后调 PUT 保存）"""
+    _require_improv_mode(body.filepath, "生成单章蓝图")
+    app = get_web_app()
+
+    async def _gen():
+        async for chunk in run_with_sse(
+            app.generate_chapter_blueprint_single_web,
+            body.llm_config_name, body.filepath,
+            body.chapter_num, body.chapter_intent, body.word_number,
+        ):
+            yield chunk
+
+    return _sse_response(_gen())
+
+
+@router.get("/generate/blueprint_single/{num}")
+def get_blueprint_single(num: int, filepath: str = "./output"):
+    from novel_generator.improv import get_single_blueprint_path
+    p = get_single_blueprint_path(filepath, num)
+    if not os.path.exists(p):
+        return {"content": "", "exists": False}
+    return {"content": read_file(p), "exists": True}
+
+
+@router.put("/generate/blueprint_single/{num}")
+def save_blueprint_single(num: int, body: SaveSingleContentRequest):
+    from novel_generator.improv import save_single_blueprint
+    save_single_blueprint(body.filepath, num, body.content)
+    return {"message": f"✅ 第 {num} 章蓝图已保存"}
+
+
+@router.post("/generate/outline_single")
+def generate_outline_single(body: GenerateOutlineSingleRequest):
+    """即兴模式·按章生成单章细纲（基于已保存的单章蓝图）"""
+    _require_improv_mode(body.filepath, "生成单章细纲")
+    app = get_web_app()
+
+    async def _gen():
+        async for chunk in run_with_sse(
+            app.generate_chapter_outline_single_web,
+            body.llm_config_name, body.filepath,
+            body.chapter_num, body.word_number,
+        ):
+            yield chunk
+
+    return _sse_response(_gen())
+
+
+@router.get("/generate/outline_single/{num}")
+def get_outline_single(num: int, filepath: str = "./output"):
+    from novel_generator.improv import get_single_outline_path
+    p = get_single_outline_path(filepath, num)
+    if not os.path.exists(p):
+        return {"content": "", "exists": False}
+    return {"content": read_file(p), "exists": True}
+
+
+@router.put("/generate/outline_single/{num}")
+def save_outline_single(num: int, body: SaveSingleContentRequest):
+    from novel_generator.improv import save_single_outline
+    save_single_outline(body.filepath, num, body.content)
+    return {"message": f"✅ 第 {num} 章细纲已保存"}
+
+
+@router.post("/generate/blueprint_single/revise")
+def revise_blueprint_single(body: ReviseBlueprintSingleRequest):
+    """即兴模式·按修订建议重写单章蓝图"""
+    _require_improv_mode(body.filepath, "修订单章蓝图")
+    app = get_web_app()
+
+    async def _gen():
+        async for chunk in run_with_sse(
+            app.revise_chapter_blueprint_single_web,
+            body.llm_config_name, body.filepath, body.chapter_num,
+            body.current_blueprint, body.revision_guidance,
+        ):
+            yield chunk
+
+    return _sse_response(_gen())
+
+
+@router.post("/generate/outline_single/revise")
+def revise_outline_single(body: ReviseOutlineSingleRequest):
+    """即兴模式·按修订建议重写单章细纲"""
+    _require_improv_mode(body.filepath, "修订单章细纲")
+    app = get_web_app()
+
+    async def _gen():
+        async for chunk in run_with_sse(
+            app.revise_chapter_outline_single_web,
+            body.llm_config_name, body.filepath, body.chapter_num,
+            body.current_outline, body.revision_guidance,
+        ):
+            yield chunk
+
+    return _sse_response(_gen())
+
+
+@router.post("/generate/chapter_improv")
+def generate_chapter_improv(body: GenerateChapterImprovRequest):
+    """即兴模式·章节正文生成（依赖单章蓝图）"""
+    _require_improv_mode(body.filepath, "即兴模式生成章节正文")
+    app = get_web_app()
+
+    async def _gen():
+        async for chunk in run_with_sse(
+            app.generate_chapter_improv_web,
+            body.llm_config_name, body.filepath, body.chapter_num,
+            body.word_number, body.user_guidance,
+            body.style_name, body.narrative_style_name,
+        ):
+            yield chunk
+
+    return _sse_response(_gen())
+
+
+@router.get("/generate/open_threads")
+def get_open_threads(filepath: str = "./output"):
+    from novel_generator.improv import read_open_threads
+    return {"content": read_open_threads(filepath)}
+
+
+@router.put("/generate/open_threads")
+def save_open_threads_endpoint(body: SaveContentRequest):
+    from novel_generator.improv import save_open_threads
+    save_open_threads(body.filepath, body.content)
+    return {"message": "✅ 伏笔池已保存"}
 
 
 # ── 合并导出小说 ────────────────────────────────────────────────────────────

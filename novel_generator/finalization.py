@@ -281,7 +281,8 @@ def finalize_chapter(
     embedding_model_name: str,
     interface_format: str,
     max_tokens: int,
-    timeout: int = 600
+    timeout: int = 600,
+    workflow_mode: str = "outlined",
 ):
     """
     对指定章节做最终处理：更新前文摘要、更新角色状态、插入向量库等。
@@ -356,6 +357,25 @@ def finalize_chapter(
         new_chapter=chapter_text,
         filepath=filepath
     )
+
+    # 即兴模式：更新伏笔池
+    if workflow_mode == "improv":
+        try:
+            from novel_generator.improv import update_open_threads
+            update_open_threads(
+                interface_format=interface_format,
+                api_key=api_key,
+                base_url=base_url,
+                model_name=model_name,
+                filepath=filepath,
+                chapter_number=novel_number,
+                chapter_text=chapter_text,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                timeout=timeout,
+            )
+        except Exception as e:
+            logging.error(f"[Improv] open_threads update failed: {e}")
 
     logging.info(f"Chapter {novel_number} has been finalized.")
 

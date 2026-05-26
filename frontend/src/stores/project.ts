@@ -36,6 +36,8 @@ export interface Project {
   cont_step_chars_text?: string
   cont_step_arcs_text?: string
   cont_step_char_state_text?: string
+  // 工作流模式：'outlined' | 'improv'
+  workflow_mode?: string
   created_at?: string
   updated_at?: string
 }

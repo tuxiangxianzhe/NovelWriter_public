@@ -86,6 +86,8 @@ class ProjectUpdate(BaseModel):
     cont_step_chars_text: str = ""
     cont_step_arcs_text: str = ""
     cont_step_char_state_text: str = ""
+    # 工作流模式：outlined（全书蓝图）/ improv（即兴单章）
+    workflow_mode: Optional[str] = None
 
 
 # ── 生成请求 ──────────────────────────────────────────────────────────────────
@@ -222,6 +224,54 @@ class FinalizeChapterRequest(BaseModel):
     filepath: str
     chapter_num: int
     word_number: int = 3000
+
+
+# ── 即兴写作模式（improv） ────────────────────────────────────────────────────
+
+class GenerateBlueprintSingleRequest(BaseModel):
+    llm_config_name: str
+    filepath: str
+    chapter_num: int
+    chapter_intent: str = ""
+    word_number: int = 7000
+
+
+class GenerateOutlineSingleRequest(BaseModel):
+    llm_config_name: str
+    filepath: str
+    chapter_num: int
+    word_number: int = 7000
+
+
+class GenerateChapterImprovRequest(BaseModel):
+    llm_config_name: str
+    filepath: str
+    chapter_num: int
+    word_number: int = 7000
+    user_guidance: str = ""
+    style_name: Optional[str] = None
+    narrative_style_name: Optional[str] = None
+
+
+class SaveSingleContentRequest(BaseModel):
+    content: str
+    filepath: str = "./output"
+
+
+class ReviseBlueprintSingleRequest(BaseModel):
+    llm_config_name: str
+    filepath: str
+    chapter_num: int
+    current_blueprint: str
+    revision_guidance: str
+
+
+class ReviseOutlineSingleRequest(BaseModel):
+    llm_config_name: str
+    filepath: str
+    chapter_num: int
+    current_outline: str
+    revision_guidance: str
 
 
 class ExpandScenesRequest(BaseModel):

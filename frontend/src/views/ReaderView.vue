@@ -15,10 +15,14 @@ const projectStore = useProjectStore()
 const chapters = ref<ChapterInfo[]>([])
 const currentChapter = ref<number | null>(null)
 const currentContent = ref('')
+const editContent = ref('')
 const allContents = ref<{ num: number; content: string }[]>([])
 const mode = ref<'single' | 'all'>('single')
+const editing = ref(false)
 const loading = ref(false)
 const loadingList = ref(false)
+const saving = ref(false)
+const saveMsg = ref('')
 
 const fontSize = useLocalStorage('reader-font-size', 16)
 
@@ -27,6 +31,7 @@ const currentIndex = computed(() =>
 )
 const hasPrev = computed(() => currentIndex.value > 0)
 const hasNext = computed(() => currentIndex.value < chapters.value.length - 1)
+const isDirty = computed(() => editing.value && editContent.value !== currentContent.value)
 
 async function loadChapterList() {
   loadingList.value = true
@@ -41,13 +46,18 @@ async function loadChapterList() {
 }
 
 async function loadChapter(num: number) {
+  if (isDirty.value && !confirm('当前章节有未保存的修改，是否放弃？')) return
+  editing.value = false
   currentChapter.value = num
   loading.value = true
+  saveMsg.value = ''
   try {
     const res = await generateApi.getChapter(num, projectStore.filepath)
     currentContent.value = res.data.content ?? ''
+    editContent.value = currentContent.value
   } catch (e: unknown) {
     currentContent.value = `加载失败: ${(e as Error).message}`
+    editContent.value = currentContent.value
   } finally {
     loading.value = false
   }
@@ -72,6 +82,35 @@ async function loadAllChapters() {
   }
 }
 
+function enterEdit() {
+  editContent.value = currentContent.value
+  editing.value = true
+  saveMsg.value = ''
+}
+
+function cancelEdit() {
+  editing.value = false
+  editContent.value = currentContent.value
+  saveMsg.value = ''
+}
+
+async function saveChapter() {
+  if (!currentChapter.value) return
+  saving.value = true
+  saveMsg.value = ''
+  try {
+    await generateApi.saveChapter(currentChapter.value, editContent.value, projectStore.filepath)
+    currentContent.value = editContent.value
+    editing.value = false
+    saveMsg.value = '✅ 已保存'
+    setTimeout(() => (saveMsg.value = ''), 3000)
+  } catch (e: unknown) {
+    saveMsg.value = `❌ 保存失败: ${(e as Error).message}`
+  } finally {
+    saving.value = false
+  }
+}
+
 function prevChapter() {
   if (!hasPrev.value) return
   loadChapter(chapters.value[currentIndex.value - 1].num)
@@ -88,6 +127,8 @@ function adjustFontSize(delta: number) {
 }
 
 function switchMode(m: 'single' | 'all') {
+  if (m === 'all' && isDirty.value && !confirm('当前章节有未保存的修改，是否放弃？')) return
+  if (m === 'all') editing.value = false
   mode.value = m
   if (m === 'all') loadAllChapters()
 }
@@ -170,16 +211,53 @@ watch(() => projectStore.filepath, loadChapterList)
         <div
           class="px-4 py-3 bg-[var(--color-parchment)] border-b border-[var(--color-parchment-darker)] flex items-center justify-between flex-wrap gap-2"
         >
-          <span class="font-medium text-sm text-[var(--color-leather)]">
-            {{
-              mode === 'single' && currentChapter
-                ? `第 ${currentChapter} 章`
-                : mode === 'all'
-                  ? '全部章节'
-                  : '请选择章节'
-            }}
-          </span>
+          <div class="flex items-center gap-2">
+            <span class="font-medium text-sm text-[var(--color-leather)]">
+              {{
+                mode === 'single' && currentChapter
+                  ? `第 ${currentChapter} 章`
+                  : mode === 'all'
+                    ? '全部章节'
+                    : '请选择章节'
+              }}
+            </span>
+            <span v-if="saveMsg" class="text-xs" :class="saveMsg.startsWith('✅') ? 'text-green-600' : 'text-red-500'">
+              {{ saveMsg }}
+            </span>
+            <span v-if="isDirty" class="text-xs text-amber-500 font-medium">● 未保存</span>
+          </div>
           <div class="flex items-center gap-3">
+            <!-- 编辑/保存按钮（仅单章模式） -->
+            <template v-if="mode === 'single' && currentChapter">
+              <template v-if="!editing">
+                <button
+                  @click="enterEdit"
+                  class="border border-[var(--color-parchment-darker)] rounded px-3 py-1 text-xs hover:bg-white transition-colors text-[var(--color-ink)]"
+                  type="button"
+                >
+                  ✏️ 编辑
+                </button>
+              </template>
+              <template v-else>
+                <button
+                  @click="saveChapter"
+                  :disabled="saving || !isDirty"
+                  class="rounded px-3 py-1 text-xs transition-colors text-white"
+                  :class="saving || !isDirty ? 'bg-gray-300 cursor-not-allowed' : 'bg-[var(--color-success)] hover:opacity-90'"
+                  type="button"
+                >
+                  {{ saving ? '保存中…' : '💾 保存' }}
+                </button>
+                <button
+                  @click="cancelEdit"
+                  :disabled="saving"
+                  class="border border-[var(--color-parchment-darker)] rounded px-3 py-1 text-xs hover:bg-white transition-colors text-[var(--color-ink)]"
+                  type="button"
+                >
+                  取消
+                </button>
+              </template>
+            </template>
             <!-- 字号调节 -->
             <div class="flex items-center gap-1">
               <button
@@ -245,6 +323,21 @@ watch(() => projectStore.filepath, loadChapterList)
             <div v-if="!currentChapter" class="text-sm text-[var(--color-ink-light)] italic text-center py-8">
               点击左侧章节开始阅读
             </div>
+            <!-- 编辑模式 -->
+            <textarea
+              v-else-if="editing"
+              v-model="editContent"
+              class="w-full mx-auto block leading-relaxed resize-none outline-none border border-[var(--color-parchment-darker)] rounded-lg p-4"
+              :style="{
+                fontSize: fontSize + 'px',
+                color: 'var(--color-ink)',
+                maxWidth: '720px',
+                fontFamily: 'var(--font-serif)',
+                lineHeight: '1.8',
+                minHeight: '60vh',
+              }"
+            />
+            <!-- 阅读模式 -->
             <div
               v-else
               class="mx-auto leading-relaxed whitespace-pre-wrap"

@@ -213,8 +213,8 @@ defineProps<{ state: ReturnType<typeof useWorkshopState> }>()
         </details>
       </div>
 
-      <!-- ⑤ 情节架构 -->
-      <div class="border border-[var(--color-parchment-darker)] rounded-lg p-3 bg-white">
+      <!-- ⑤ 情节架构（仅大纲模式可见·即兴模式不需要全书规划） -->
+      <div v-if="state.workflowMode.value !== 'improv'" class="border border-[var(--color-parchment-darker)] rounded-lg p-3 bg-white">
         <div class="flex items-center justify-between mb-2">
           <span class="text-sm font-semibold text-[var(--color-leather)]">⑤ 情节架构</span>
           <div class="flex items-center gap-2">
@@ -246,9 +246,12 @@ defineProps<{ state: ReturnType<typeof useWorkshopState> }>()
         </details>
       </div>
 
-      <!-- 组装按钮（仅 stepMode） -->
+      <!-- 组装按钮（仅 stepMode）·improv 模式下不需要 plotText -->
       <div v-if="state.stepMode.value" class="flex justify-end">
-        <button @click="state.doAssemble()" :disabled="!state.seedText.value || !state.charText.value || !state.worldText.value || !state.plotText.value" class="btn-primary" type="button">
+        <button
+          @click="state.doAssemble()"
+          :disabled="!state.seedText.value || !state.charText.value || !state.worldText.value || (state.workflowMode.value !== 'improv' && !state.plotText.value)"
+          class="btn-primary" type="button">
           ▶ 组装为完整架构
         </button>
       </div>
@@ -474,8 +477,8 @@ defineProps<{ state: ReturnType<typeof useWorkshopState> }>()
               </details>
             </div>
 
-            <!-- C② 新增剧情弧 -->
-            <div class="border border-[var(--color-parchment-darker)] rounded-lg p-3 space-y-2">
+            <!-- C② 新增剧情弧（仅大纲模式可见） -->
+            <div v-if="state.workflowMode.value !== 'improv'" class="border border-[var(--color-parchment-darker)] rounded-lg p-3 space-y-2">
               <h4 class="text-sm font-medium text-[var(--color-leather)]">C② 新增剧情弧</h4>
               <button @click="state.doContStepArcs()" :disabled="state.contStepArcs.value.running || !state.contCharsText.value" class="btn-primary" type="button">
                 {{ state.contStepArcs.value.running ? '生成中…' : '▶ 生成新增剧情弧' }}
@@ -538,7 +541,10 @@ defineProps<{ state: ReturnType<typeof useWorkshopState> }>()
 
             <!-- 追加按钮 -->
             <div class="flex justify-end">
-              <button @click="state.doContAssemble()" :disabled="!state.contCharsText.value || !state.contArcsText.value" class="btn-primary" type="button">
+              <button
+                @click="state.doContAssemble()"
+                :disabled="!state.contCharsText.value || (state.workflowMode.value !== 'improv' && !state.contArcsText.value)"
+                class="btn-primary" type="button">
                 ▶ 追加到架构文件
               </button>
             </div>

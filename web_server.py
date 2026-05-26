@@ -498,6 +498,9 @@ class NovelGeneratorWeb:
             vs_handler = _VectorStoreWarningHandler()
             logging.getLogger().addHandler(vs_handler)
             try:
+                # 读取项目工作流模式（outlined / improv）
+                _proj_cfg = self._load_project_config(filepath)
+                _wf_mode = _proj_cfg.get("workflow_mode", "outlined")
                 finalize_chapter(
                     novel_number=int(chapter_num),
                     word_number=int(word_number),
@@ -512,7 +515,8 @@ class NovelGeneratorWeb:
                     embedding_model_name=emb_conf["model_name"],
                     interface_format=llm_conf["interface_format"],
                     max_tokens=llm_conf["max_tokens"],
-                    timeout=llm_conf["timeout"]
+                    timeout=llm_conf["timeout"],
+                    workflow_mode=_wf_mode,
                 )
             finally:
                 logging.getLogger().removeHandler(vs_handler)
@@ -569,6 +573,177 @@ class NovelGeneratorWeb:
             import traceback
             traceback.print_exc()
             return f"❌ 生成细纲失败: {str(e)}"
+
+    # ── 即兴模式专用方法 ──────────────────────────────────────────────────────
+
+    def generate_chapter_blueprint_single_web(self, llm_config_name, filepath,
+                                              chapter_num, chapter_intent,
+                                              word_number=7000,
+                                              progress=gr.Progress()):
+        """即兴模式·生成单章蓝图（不直接保存）"""
+        try:
+            progress(0, desc=f"准备生成第 {chapter_num} 章蓝图…")
+            if not llm_config_name or llm_config_name not in self.config.get("llm_configs", {}):
+                return "❌ 请先选择有效的 LLM 配置"
+            llm_conf = self.config["llm_configs"][llm_config_name]
+
+            from novel_generator.improv import generate_chapter_blueprint_single
+            result = generate_chapter_blueprint_single(
+                interface_format=llm_conf["interface_format"],
+                api_key=llm_conf["api_key"],
+                base_url=llm_conf["base_url"],
+                model_name=llm_conf["model_name"],
+                filepath=filepath,
+                chapter_number=int(chapter_num),
+                chapter_intent=chapter_intent or "",
+                word_number=int(word_number),
+                temperature=llm_conf["temperature"],
+                max_tokens=llm_conf["max_tokens"],
+                timeout=llm_conf["timeout"],
+                enable_thinking=llm_conf.get("enable_thinking", False),
+                thinking_budget=llm_conf.get("thinking_budget", 0),
+                progress=progress,
+            )
+            return result
+        except Exception as e:
+            logging.error(f"[Improv] 单章蓝图生成失败: {e}", exc_info=True)
+            return f"❌ 生成失败: {e}"
+
+    def revise_chapter_blueprint_single_web(self, llm_config_name, filepath,
+                                            chapter_num, current_blueprint, revision_guidance,
+                                            progress=gr.Progress()):
+        """即兴模式·修订单章蓝图"""
+        try:
+            progress(0, desc=f"准备修订第 {chapter_num} 章蓝图…")
+            if not llm_config_name or llm_config_name not in self.config.get("llm_configs", {}):
+                return "❌ 请先选择有效的 LLM 配置"
+            llm_conf = self.config["llm_configs"][llm_config_name]
+
+            from novel_generator.improv import revise_chapter_blueprint_single
+            result = revise_chapter_blueprint_single(
+                interface_format=llm_conf["interface_format"],
+                api_key=llm_conf["api_key"],
+                base_url=llm_conf["base_url"],
+                model_name=llm_conf["model_name"],
+                filepath=filepath,
+                chapter_number=int(chapter_num),
+                current_blueprint=current_blueprint or "",
+                revision_guidance=revision_guidance or "",
+                temperature=llm_conf["temperature"],
+                max_tokens=llm_conf["max_tokens"],
+                timeout=llm_conf["timeout"],
+                enable_thinking=llm_conf.get("enable_thinking", False),
+                thinking_budget=llm_conf.get("thinking_budget", 0),
+                progress=progress,
+            )
+            return result
+        except Exception as e:
+            logging.error(f"[Improv] 单章蓝图修订失败: {e}", exc_info=True)
+            return f"❌ 修订失败: {e}"
+
+    def revise_chapter_outline_single_web(self, llm_config_name, filepath,
+                                          chapter_num, current_outline, revision_guidance,
+                                          progress=gr.Progress()):
+        """即兴模式·修订单章细纲"""
+        try:
+            progress(0, desc=f"准备修订第 {chapter_num} 章细纲…")
+            if not llm_config_name or llm_config_name not in self.config.get("llm_configs", {}):
+                return "❌ 请先选择有效的 LLM 配置"
+            llm_conf = self.config["llm_configs"][llm_config_name]
+
+            from novel_generator.improv import revise_chapter_outline_single
+            result = revise_chapter_outline_single(
+                interface_format=llm_conf["interface_format"],
+                api_key=llm_conf["api_key"],
+                base_url=llm_conf["base_url"],
+                model_name=llm_conf["model_name"],
+                filepath=filepath,
+                chapter_number=int(chapter_num),
+                current_outline=current_outline or "",
+                revision_guidance=revision_guidance or "",
+                temperature=llm_conf["temperature"],
+                max_tokens=llm_conf["max_tokens"],
+                timeout=llm_conf["timeout"],
+                enable_thinking=llm_conf.get("enable_thinking", False),
+                thinking_budget=llm_conf.get("thinking_budget", 0),
+                progress=progress,
+            )
+            return result
+        except Exception as e:
+            logging.error(f"[Improv] 单章细纲修订失败: {e}", exc_info=True)
+            return f"❌ 修订失败: {e}"
+
+    def generate_chapter_outline_single_web(self, llm_config_name, filepath,
+                                            chapter_num, word_number=7000,
+                                            progress=gr.Progress()):
+        """即兴模式·生成单章细纲（基于已保存的单章蓝图）"""
+        try:
+            progress(0, desc=f"准备生成第 {chapter_num} 章细纲…")
+            if not llm_config_name or llm_config_name not in self.config.get("llm_configs", {}):
+                return "❌ 请先选择有效的 LLM 配置"
+            llm_conf = self.config["llm_configs"][llm_config_name]
+
+            from novel_generator.improv import generate_chapter_outline_single
+            result = generate_chapter_outline_single(
+                interface_format=llm_conf["interface_format"],
+                api_key=llm_conf["api_key"],
+                base_url=llm_conf["base_url"],
+                model_name=llm_conf["model_name"],
+                filepath=filepath,
+                chapter_number=int(chapter_num),
+                word_number=int(word_number),
+                temperature=llm_conf["temperature"],
+                max_tokens=llm_conf["max_tokens"],
+                timeout=llm_conf["timeout"],
+                enable_thinking=llm_conf.get("enable_thinking", False),
+                thinking_budget=llm_conf.get("thinking_budget", 0),
+                progress=progress,
+            )
+            return result
+        except Exception as e:
+            logging.error(f"[Improv] 单章细纲生成失败: {e}", exc_info=True)
+            return f"❌ 生成失败: {e}"
+
+    def generate_chapter_improv_web(self, llm_config_name, filepath, chapter_num,
+                                    word_number, user_guidance,
+                                    style_name=None, narrative_style_name=None,
+                                    progress=gr.Progress()):
+        """即兴模式·章节正文生成（依赖单章蓝图，可选单章细纲）"""
+        try:
+            progress(0, desc=f"准备生成第 {chapter_num} 章正文…")
+            if not llm_config_name or llm_config_name not in self.config.get("llm_configs", {}):
+                return "❌ 请先选择有效的 LLM 配置"
+            llm_conf = self.config["llm_configs"][llm_config_name]
+
+            writing_style = self.get_style_instruction(style_name) if style_name else ""
+            narrative_instr = self.get_narrative_instructions(narrative_style_name)
+            narrative_for_ch = narrative_instr.get("for_chapter", "")
+
+            from novel_generator.improv import generate_chapter_improv
+            result = generate_chapter_improv(
+                interface_format=llm_conf["interface_format"],
+                api_key=llm_conf["api_key"],
+                base_url=llm_conf["base_url"],
+                model_name=llm_conf["model_name"],
+                filepath=filepath,
+                chapter_number=int(chapter_num),
+                user_guidance=user_guidance or "",
+                word_number=int(word_number),
+                temperature=llm_conf["temperature"],
+                max_tokens=llm_conf["max_tokens"],
+                timeout=llm_conf["timeout"],
+                enable_thinking=llm_conf.get("enable_thinking", False),
+                thinking_budget=llm_conf.get("thinking_budget", 0),
+                style_instruction=writing_style,
+                narrative_instruction=narrative_for_ch,
+                progress=progress,
+            )
+            if result and not result.startswith("❌"):
+                return f"✅ 第 {chapter_num} 章草稿生成成功!\n\n{result}"
+            return result
+        except Exception as e:
+            logging.error(f"[Improv] 章节正文生成失败: {e}", exc_info=True)
+            return f"❌ 生成失败: {e}"
 
     def expand_scenes_web(self, llm_config_name, filepath, chapter_num,
                           style_name, narrative_style_name=None, xp_type="",
@@ -3266,6 +3441,8 @@ class NovelGeneratorWeb:
         "arch_style": "", "bp_style": "", "ch_style": "", "ch_narrative_style": "",
         "expand_style": "", "expand_narrative_style": "",
         "cont_style": "", "cont_xp_type": "",
+        # 工作流模式：outlined（全书蓝图）| improv（即兴单章）
+        "workflow_mode": "outlined",
         # 分步生成中间内容（断点续作）
         "step_seed_text": "", "step_char_text": "", "step_char_state_text": "",
         "step_world_text": "", "step_plot_text": "",
@@ -3416,7 +3593,8 @@ class NovelGeneratorWeb:
                              step_seed_text="", step_char_text="", step_char_state_text="",
                              step_world_text="", step_plot_text="",
                              cont_step_chars_text="", cont_step_arcs_text="", cont_step_char_state_text="",
-                             xp_selected_presets=None):
+                             xp_selected_presets=None,
+                             workflow_mode=None):
         """将当前 UI 参数保存到活跃项目（projects.json 基础字段 + project_config.json 完整配置）"""
         active = self.get_active_project_name()
         if not active or active not in self.projects_data.get("projects", {}):
@@ -3465,6 +3643,7 @@ class NovelGeneratorWeb:
             "cont_step_arcs_text": cont_step_arcs_text or "",
             "cont_step_char_state_text": cont_step_char_state_text or "",
             "xp_selected_presets": xp_selected_presets if xp_selected_presets is not None else [],
+            **({"workflow_mode": workflow_mode} if workflow_mode in ("outlined", "improv") else {}),
         })
         return f"✅ 项目「{active}」参数已保存"
 

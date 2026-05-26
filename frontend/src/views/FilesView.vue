@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, computed } from 'vue'
 import { filesApi } from '@/api/client'
 import { useProjectStore } from '@/stores/project'
 
@@ -14,8 +14,14 @@ const projectStore = useProjectStore()
 const files = ref<FileEntry[]>([])
 const selectedFile = ref<FileEntry | null>(null)
 const fileContent = ref('')
+const editContent = ref('')
+const editing = ref(false)
 const loading = ref(false)
 const loadingContent = ref(false)
+const saving = ref(false)
+const saveMsg = ref('')
+
+const isDirty = computed(() => editing.value && editContent.value !== fileContent.value)
 
 function formatSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`
@@ -33,15 +39,51 @@ async function loadFiles() {
 }
 
 async function loadContent(f: FileEntry) {
+  if (isDirty.value && !confirm('当前文件有未保存的修改，是否放弃？')) return
+  editing.value = false
   selectedFile.value = f
   loadingContent.value = true
+  saveMsg.value = ''
   try {
     const res = await filesApi.content(projectStore.filepath, f.path)
     fileContent.value = res.data.content
+    editContent.value = fileContent.value
   } catch (e: unknown) {
     fileContent.value = `❌ 读取失败: ${(e as Error).message}`
+    editContent.value = fileContent.value
   } finally {
     loadingContent.value = false
+  }
+}
+
+function enterEdit() {
+  editContent.value = fileContent.value
+  editing.value = true
+  saveMsg.value = ''
+}
+
+function cancelEdit() {
+  editing.value = false
+  editContent.value = fileContent.value
+  saveMsg.value = ''
+}
+
+async function saveFile() {
+  if (!selectedFile.value) return
+  saving.value = true
+  saveMsg.value = ''
+  try {
+    await filesApi.save(projectStore.filepath, selectedFile.value.path, editContent.value)
+    fileContent.value = editContent.value
+    editing.value = false
+    saveMsg.value = '✅ 已保存'
+    // Refresh file list to update sizes
+    loadFiles()
+    setTimeout(() => (saveMsg.value = ''), 3000)
+  } catch (e: unknown) {
+    saveMsg.value = `❌ 保存失败: ${(e as Error).message}`
+  } finally {
+    saving.value = false
   }
 }
 
@@ -107,14 +149,56 @@ watch(() => projectStore.filepath, loadFiles)
       </div>
 
       <!-- 文件内容 -->
-      <div class="lg:col-span-3 rounded-xl border border-[var(--color-parchment-darker)] bg-white overflow-hidden">
-        <div class="px-4 py-3 bg-[var(--color-parchment)] border-b border-[var(--color-parchment-darker)]">
-          <span class="font-medium text-sm text-[var(--color-leather)]">
-            {{ selectedFile ? selectedFile.path : '请选择文件' }}
-          </span>
+      <div class="lg:col-span-3 rounded-xl border border-[var(--color-parchment-darker)] bg-white overflow-hidden flex flex-col">
+        <div class="px-4 py-3 bg-[var(--color-parchment)] border-b border-[var(--color-parchment-darker)] flex items-center justify-between flex-wrap gap-2">
+          <div class="flex items-center gap-2">
+            <span class="font-medium text-sm text-[var(--color-leather)]">
+              {{ selectedFile ? selectedFile.path : '请选择文件' }}
+            </span>
+            <span v-if="saveMsg" class="text-xs" :class="saveMsg.startsWith('✅') ? 'text-green-600' : 'text-red-500'">
+              {{ saveMsg }}
+            </span>
+            <span v-if="isDirty" class="text-xs text-amber-500 font-medium">● 未保存</span>
+          </div>
+          <div v-if="selectedFile && fileContent && !loadingContent" class="flex items-center gap-2">
+            <template v-if="!editing">
+              <button
+                @click="enterEdit"
+                class="border border-[var(--color-parchment-darker)] rounded px-3 py-1 text-xs hover:bg-white transition-colors text-[var(--color-ink)]"
+                type="button"
+              >
+                ✏️ 编辑
+              </button>
+            </template>
+            <template v-else>
+              <button
+                @click="saveFile"
+                :disabled="saving || !isDirty"
+                class="rounded px-3 py-1 text-xs transition-colors text-white"
+                :class="saving || !isDirty ? 'bg-gray-300 cursor-not-allowed' : 'bg-[var(--color-success)] hover:opacity-90'"
+                type="button"
+              >
+                {{ saving ? '保存中…' : '💾 保存' }}
+              </button>
+              <button
+                @click="cancelEdit"
+                :disabled="saving"
+                class="border border-[var(--color-parchment-darker)] rounded px-3 py-1 text-xs hover:bg-white transition-colors text-[var(--color-ink)]"
+                type="button"
+              >
+                取消
+              </button>
+            </template>
+          </div>
         </div>
-        <div class="p-4 overflow-y-auto" style="max-height: 600px">
+        <div class="flex-1 p-4 overflow-y-auto" style="max-height: 600px">
           <div v-if="loadingContent" class="text-sm text-[var(--color-ink-light)] italic">加载中…</div>
+          <textarea
+            v-else-if="editing"
+            v-model="editContent"
+            class="w-full h-full text-sm font-mono whitespace-pre-wrap leading-relaxed text-[var(--color-ink)] resize-none outline-none border border-[var(--color-parchment-darker)] rounded-lg p-3"
+            style="min-height: 550px"
+          />
           <pre v-else-if="fileContent" class="text-sm font-mono whitespace-pre-wrap leading-relaxed text-[var(--color-ink)]">{{ fileContent }}</pre>
           <p v-else class="text-sm text-[var(--color-ink-light)] italic">点击左侧文件查看内容</p>
         </div>

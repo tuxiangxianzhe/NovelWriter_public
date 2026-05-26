@@ -151,6 +151,21 @@ export function useWorkshopState() {
   const expandNew = ref('')        // 润色后新文
   const expandChapterNum = ref(0)  // 润色的章节号
 
+  // ── 即兴写作模式（improv） ───────────────────────────────────────────────
+  const workflowMode = ref<'outlined' | 'improv'>('outlined')
+  const improvBlueprint = ref(mkState())
+  const improvOutline = ref(mkState())
+  const improvChapter = ref(mkState())
+  const improvIntent = ref('')              // 用户本章意图（自由文本框）
+  const improvBlueprintText = ref('')       // 已保存的本章蓝图全文（编辑用）
+  const improvOutlineText = ref('')         // 已保存的本章细纲全文（编辑用）
+  const openThreadsText = ref('')           // 伏笔池全文
+  // 修订状态
+  const improvBlueprintRevise = ref(mkState())
+  const improvOutlineRevise = ref(mkState())
+  const improvBlueprintRevisionGuidance = ref('')
+  const improvOutlineRevisionGuidance = ref('')
+
   // 偏好提取
   const profileExtracted = ref('')
   const profileShowConfirm = ref(false)
@@ -250,6 +265,7 @@ export function useWorkshopState() {
       if (p.cont_step_chars_text) contCharsText.value = p.cont_step_chars_text
       if (p.cont_step_arcs_text) contArcsText.value = p.cont_step_arcs_text
       if (p.cont_step_char_state_text) contCharStateText.value = p.cont_step_char_state_text
+      workflowMode.value = (p.workflow_mode === 'improv' ? 'improv' : 'outlined')
     }
     try {
       const res = await stylesApi.list()
@@ -306,6 +322,13 @@ export function useWorkshopState() {
         contCharsText.value = p.cont_step_chars_text || ''
         contArcsText.value = p.cont_step_arcs_text || ''
         contCharStateText.value = p.cont_step_char_state_text || ''
+        workflowMode.value = (p.workflow_mode === 'improv' ? 'improv' : 'outlined')
+      }
+      // 即兴模式：加载伏笔池及当前章节蓝图/细纲
+      if (workflowMode.value === 'improv') {
+        loadOpenThreads()
+        loadImprovBlueprint()
+        loadImprovOutline()
       }
       await generateStore.loadStatus()
       arch.value.result = generateStore.architectureContent
@@ -777,6 +800,176 @@ export function useWorkshopState() {
     })
   }
 
+  // ── 即兴写作模式：单章蓝图/细纲/正文/伏笔池 ──────────────────────────────
+  function doGenerateImprovBlueprint() {
+    runSSE(improvBlueprint.value, '/generate/blueprint_single', {
+      llm_config_name: llmConfig.value,
+      filepath: filepath.value,
+      chapter_num: chapterNum.value,
+      chapter_intent: improvIntent.value,
+      word_number: wordNumber.value,
+    })
+  }
+
+  async function saveImprovBlueprint() {
+    try {
+      const num = chapterNum.value
+      const content = improvBlueprint.value.result || improvBlueprintText.value
+      await generateApi.saveBlueprintSingle(num, content, filepath.value)
+      improvBlueprintText.value = content
+      saveMsg.value = `✅ 第${num}章蓝图已保存`
+      setTimeout(() => { saveMsg.value = '' }, 3000)
+    } catch (e: unknown) {
+      saveMsg.value = `❌ 保存失败: ${(e as Error).message}`
+    }
+  }
+
+  async function loadImprovBlueprint() {
+    try {
+      const res = await generateApi.getBlueprintSingle(chapterNum.value, filepath.value)
+      improvBlueprintText.value = res.data.content || ''
+      improvBlueprint.value.result = res.data.content || ''
+    } catch { /* ignore */ }
+  }
+
+  function doGenerateImprovOutline() {
+    runSSE(improvOutline.value, '/generate/outline_single', {
+      llm_config_name: llmConfig.value,
+      filepath: filepath.value,
+      chapter_num: chapterNum.value,
+      word_number: wordNumber.value,
+    })
+  }
+
+  async function saveImprovOutline() {
+    try {
+      const num = chapterNum.value
+      const content = improvOutline.value.result || improvOutlineText.value
+      await generateApi.saveOutlineSingle(num, content, filepath.value)
+      improvOutlineText.value = content
+      saveMsg.value = `✅ 第${num}章细纲已保存`
+      setTimeout(() => { saveMsg.value = '' }, 3000)
+    } catch (e: unknown) {
+      saveMsg.value = `❌ 保存失败: ${(e as Error).message}`
+    }
+  }
+
+  async function loadImprovOutline() {
+    try {
+      const res = await generateApi.getOutlineSingle(chapterNum.value, filepath.value)
+      improvOutlineText.value = res.data.content || ''
+      improvOutline.value.result = res.data.content || ''
+    } catch { /* ignore */ }
+  }
+
+  function doGenerateImprovChapter() {
+    runSSE(improvChapter.value, '/generate/chapter_improv', {
+      llm_config_name: llmConfig.value,
+      filepath: filepath.value,
+      chapter_num: chapterNum.value,
+      word_number: wordNumber.value,
+      user_guidance: chGuidance.value || userGuidance.value,
+      style_name: chStyle.value === '不使用文风' ? null : chStyle.value || null,
+      narrative_style_name: chNarrativeStyle.value === '不使用文风' ? null : chNarrativeStyle.value || null,
+    })
+  }
+
+  async function saveImprovChapter() {
+    try {
+      const num = chapterNum.value
+      await generateApi.saveChapter(num, improvChapter.value.result, filepath.value)
+      saveMsg.value = `✅ 第${num}章已保存`
+      setTimeout(() => { saveMsg.value = '' }, 3000)
+    } catch (e: unknown) {
+      saveMsg.value = `❌ 保存失败: ${(e as Error).message}`
+    }
+  }
+
+  async function loadOpenThreads() {
+    try {
+      const res = await generateApi.getOpenThreads(filepath.value)
+      openThreadsText.value = res.data.content || ''
+    } catch { /* ignore */ }
+  }
+
+  async function saveOpenThreadsText() {
+    try {
+      await generateApi.saveOpenThreads(openThreadsText.value, filepath.value)
+      saveMsg.value = '✅ 伏笔池已保存'
+      setTimeout(() => { saveMsg.value = '' }, 3000)
+    } catch (e: unknown) {
+      saveMsg.value = `❌ 保存失败: ${(e as Error).message}`
+    }
+  }
+
+  function doReviseImprovBlueprint() {
+    const current = improvBlueprint.value.result || improvBlueprintText.value
+    if (!current) {
+      saveMsg.value = '❌ 当前蓝图为空·先生成或加载一份蓝图再修订'
+      setTimeout(() => { saveMsg.value = '' }, 3000)
+      return
+    }
+    if (!improvBlueprintRevisionGuidance.value.trim()) {
+      saveMsg.value = '❌ 请填写修订建议'
+      setTimeout(() => { saveMsg.value = '' }, 3000)
+      return
+    }
+    runSSE(improvBlueprintRevise.value, '/generate/blueprint_single/revise', {
+      llm_config_name: llmConfig.value,
+      filepath: filepath.value,
+      chapter_num: chapterNum.value,
+      current_blueprint: current,
+      revision_guidance: improvBlueprintRevisionGuidance.value,
+    })
+  }
+
+  // 修订完成后·把结果回填到 improvBlueprint.result
+  watch(() => improvBlueprintRevise.value.result, (v) => {
+    if (v && !improvBlueprintRevise.value.running) {
+      improvBlueprint.value.result = v
+    }
+  })
+
+  function doReviseImprovOutline() {
+    const current = improvOutline.value.result || improvOutlineText.value
+    if (!current) {
+      saveMsg.value = '❌ 当前细纲为空·先生成或加载一份细纲再修订'
+      setTimeout(() => { saveMsg.value = '' }, 3000)
+      return
+    }
+    if (!improvOutlineRevisionGuidance.value.trim()) {
+      saveMsg.value = '❌ 请填写修订建议'
+      setTimeout(() => { saveMsg.value = '' }, 3000)
+      return
+    }
+    runSSE(improvOutlineRevise.value, '/generate/outline_single/revise', {
+      llm_config_name: llmConfig.value,
+      filepath: filepath.value,
+      chapter_num: chapterNum.value,
+      current_outline: current,
+      revision_guidance: improvOutlineRevisionGuidance.value,
+    })
+  }
+
+  watch(() => improvOutlineRevise.value.result, (v) => {
+    if (v && !improvOutlineRevise.value.running) {
+      improvOutline.value.result = v
+    }
+  })
+
+  async function setWorkflowMode(mode: 'outlined' | 'improv') {
+    if (workflowMode.value === mode) return
+    workflowMode.value = mode
+    // 立即保存
+    try {
+      await projectStore.saveProject({ workflow_mode: mode })
+      saveMsg.value = mode === 'improv' ? '✅ 已切换到即兴模式' : '✅ 已切换到大纲模式'
+      setTimeout(() => { saveMsg.value = '' }, 3000)
+    } catch (e: unknown) {
+      saveMsg.value = `❌ 切换失败: ${(e as Error).message}`
+    }
+  }
+
   // ── 一键完成 ──────────────────────────────────────────────────────────────
   watch(() => batch.value.running, (running, wasRunning) => {
     if (wasRunning && !running && batch.value.result && !batch.value.error) {
@@ -1138,6 +1331,18 @@ export function useWorkshopState() {
     doGenerateOutlineBatch, loadOutlineText, saveOutline, saveBatchOutline,
     doReviseOutlineBatch, revertOutlineBatch, extractChapterToEdit,
     doGenerateChapter, doFinalize,
+    // improv mode
+    workflowMode, setWorkflowMode,
+    improvBlueprint, improvOutline, improvChapter,
+    improvIntent, improvBlueprintText, improvOutlineText, openThreadsText,
+    doGenerateImprovBlueprint, saveImprovBlueprint, loadImprovBlueprint,
+    doGenerateImprovOutline, saveImprovOutline, loadImprovOutline,
+    doGenerateImprovChapter, saveImprovChapter,
+    loadOpenThreads, saveOpenThreadsText,
+    // improv 修订
+    improvBlueprintRevise, improvOutlineRevise,
+    improvBlueprintRevisionGuidance, improvOutlineRevisionGuidance,
+    doReviseImprovBlueprint, doReviseImprovOutline,
     doBatchGenerate, doExpand, doExportNovel,
     doContinueArch, doContStepSeed, doContStepWorld, doContStepChars, doContStepArcs, doContStepCharState, doContAssemble,
     compressRunning, compressResult, compressWorldBuilding, doCompressContext,

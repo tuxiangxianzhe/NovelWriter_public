@@ -4,7 +4,8 @@
 
 import os
 from fastapi import APIRouter, HTTPException
-from utils import read_file
+from pydantic import BaseModel
+from utils import read_file, save_string_to_txt
 
 router = APIRouter(tags=["files"])
 
@@ -57,3 +58,30 @@ def get_file_content(filepath: str = "./output", path: str = ""):
 
     content = read_file(full)
     return {"path": path, "content": content}
+
+
+class SaveFileRequest(BaseModel):
+    content: str
+
+
+@router.put("/files/content")
+def save_file_content(body: SaveFileRequest, filepath: str = "./output", path: str = ""):
+    """保存文件内容"""
+    if not path:
+        raise HTTPException(status_code=400, detail="path 参数不能为空")
+
+    # Security: prevent path traversal
+    base = os.path.realpath(filepath)
+    full = os.path.realpath(os.path.join(base, path))
+    if not full.startswith(base):
+        raise HTTPException(status_code=403, detail="路径访问被拒绝")
+
+    ext = os.path.splitext(full)[1].lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(status_code=403, detail="不支持的文件类型")
+
+    if not os.path.exists(full):
+        raise HTTPException(status_code=404, detail=f"文件不存在: {path}")
+
+    save_string_to_txt(body.content, full)
+    return {"message": f"✅ 文件已保存: {path}"}

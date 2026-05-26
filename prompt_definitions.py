@@ -54,6 +54,13 @@ PROMPT_KEYS = [
     "brainstorm_system_prompt",
     "detailed_outline_prompt",
     "detailed_outline_prompt_detailed",
+    # —— 即兴写作模式（improv）专用 ——
+    "chapter_blueprint_single_prompt",
+    "chapter_outline_single_prompt",
+    "next_chapter_draft_improv_prompt",
+    "open_threads_update_prompt",
+    "chapter_blueprint_single_revise_prompt",
+    "chapter_outline_single_revise_prompt",
 ]
 
 # 提示词中文名映射
@@ -95,6 +102,13 @@ PROMPT_DISPLAY_NAMES = {
     "brainstorm_system_prompt": "创意讨论系统提示",
     "detailed_outline_prompt": "章节细纲生成（精简）",
     "detailed_outline_prompt_detailed": "章节细纲生成（详细）",
+    # —— 即兴写作模式 ——
+    "chapter_blueprint_single_prompt": "单章蓝图生成（即兴）",
+    "chapter_outline_single_prompt": "单章细纲生成（即兴）",
+    "next_chapter_draft_improv_prompt": "章节正文生成（即兴）",
+    "open_threads_update_prompt": "伏笔池更新（即兴）",
+    "chapter_blueprint_single_revise_prompt": "单章蓝图修订（即兴）",
+    "chapter_outline_single_revise_prompt": "单章细纲修订（即兴）",
 }
 
 # ============================================================
@@ -1560,6 +1574,348 @@ _DEFAULT_PROMPTS["detailed_outline_prompt_detailed"] = """\
 仅返回细纲文本，不要解释任何内容。"""
 
 # ============================================================
+# 即兴写作模式（improv）——不依赖全书蓝图，按章口述意图 → 单章蓝图 → 单章细纲 → 正文
+# ============================================================
+
+_DEFAULT_PROMPTS["chapter_blueprint_single_prompt"] = """\
+你是一位资深的长篇小说策划，正在协助作者以"即兴写作"模式推进一部已开篇的长篇小说。
+作者刚刚口述了对当前这一章的意图，请你将其落实为一份**单章蓝图**——
+不是全书规划，不要展望未来章节，只服务于"本章如何写"。
+
+==== 已有素材（不可改动） ====
+【核心种子】
+{core_seed}
+
+【世界观】
+{world_building}
+
+【角色动力学】
+{character_dynamics}
+
+【已写章节累积摘要】
+{global_summary}
+
+【角色当前状态】
+{character_state}
+
+【伏笔池·open_threads】（已埋未收 / 已收未结 / 待开发的线索）
+{open_threads}
+
+==== 作者本章意图（关键输入·最高优先级） ====
+本章序号：第 {chapter_number} 章
+作者输入：
+{chapter_intent}
+
+字数预算基础值：{word_number} 字（按下述章节强度调档）
+
+==== 任务 ====
+请严格按以下结构输出，**不要添加额外说明**，每个字段都必须填写：
+
+【标题】
+（一句话章名，参考已写章节风格，不超过 8 字）
+
+【章节强度】
+从下述三档中选一档（**作者意图明显偏铺垫/日常则给 ★★★，偏高潮/对决/情感爆发则给 ★★★★+；★★★★★ 仅在作者明示"全章高潮/决战"时给**）：
+- ★★★ 日常/铺垫章 → 字数 5000-7000
+- ★★★★ 主推进/关键转折章 → 字数 7000-9000
+- ★★★★★ 高潮/决战/重大揭示章 → 字数 8000-10500
+
+【字数预算】
+（明确写出本章目标字数区间，依强度档位选择）
+
+【衔接点】
+（2-3 句·从 global_summary 末状态 / character_state 接过来的具体场景、时间、情绪。必须是连续的，不能凭空跳跃。）
+
+【核心剧情】
+（4-6 句·本章按时间顺序发生了什么。每句一个推进事件。**禁止**写"接下来""然后会""下一章"等展望未来章节的内容。）
+
+【本章核心冲突或互动】
+- 涉及角色：（从 character_dynamics 中选，原文引用姓名）
+- 核心冲突/互动类型：（如：对峙 / 抉择 / 揭示真相 / 关系破裂或修复 / 情感升温 / 决斗 等）
+- 心理破坏点或推进点：（本章着重击穿的那道防线 / 推进的那条认知 · 1-2 句）
+- 必须出现的动作清单：（3-5 个具体动作/对白要素/物件，下游正文生成必须包含）
+
+【伏笔互动】
+- 呼应：（本章触及/回收 open_threads 中的哪些条目，**原文引用条目内容**；无则写"无"）
+- 推进：（推进哪条线，进度从 X% 到 Y%；无则写"无"）
+- 新埋：（本章新埋下的钩子，需要后续章节回收的，1-2 个为宜；可为空）
+
+【节奏规划】
+- 开场（约 20%）：（一句话）
+- 中段（约 50%）：（一句话·核心冲突或推进主体）
+- 收尾（约 30%）：（一句话·情绪落点）
+
+【对话密度目标】
+（一句话·按章节强度，每 500-800 字至少 1 处对话）
+
+==== 硬性约束 ====
+1. 蓝图所有内容必须**只服务本章**，不规划未来章节。
+2. 衔接点必须能在 global_summary / character_state 里找到对应锚点，不要凭空创造前情。
+3. 不要复读 global_summary 已有事件——本章是新事件。
+4. **作者意图为最高优先级**——若意图与角色档案冲突，按作者意图调整。
+5. 字数预算严格按强度分级，**宁短勿冗**。
+"""
+
+_DEFAULT_PROMPTS["chapter_outline_single_prompt"] = """\
+你是一位资深的长篇小说策划。作者已确认以下单章蓝图，
+现在请将这份蓝图展开成**分场细纲**——为后续正文生成提供更精细的骨架。
+
+==== 已有素材（仅作锚点参考） ====
+【核心种子】
+{core_seed}
+
+【角色动力学摘录】
+{character_dynamics}
+
+【已写章节累积摘要】
+{global_summary}
+
+【角色当前状态】
+{character_state}
+
+【伏笔池】
+{open_threads}
+
+==== 本章蓝图（必须严格遵循） ====
+{chapter_blueprint}
+
+==== 任务 ====
+将上述蓝图展开为 4-6 个连续场景的细纲。
+每个场景说明：
+- 场景序号 + 简称
+- 地点 / 时间
+- 在场角色及其当前状态
+- 该场景**具体发生的事件**（动作/对话方向/反应级别·不要写正文，只写骨架）
+- 情绪与张力走向（一句话）
+- 与下一场景的过渡方式
+
+针对高强度场景（★★★★ 及以上），还需补充：
+- 升温契机（如何自然进入高张力状态）
+- 阶段推进（按"前奏 → 渐进 → 高潮 → 余韵"列出每阶段的核心行为/动作/物件，必须落实蓝图中"必须出现的动作清单"）
+- 角色心理变化（每阶段一句话）
+- 感官重点（触/视/听/嗅·选 2-3 个维度）
+
+==== 输出格式 ====
+
+【场景 1·{{简称}}】
+- 地点 / 时间：...
+- 在场角色：...
+- 事件骨架：...
+- 情绪/张力：...
+- 过渡：...
+
+【场景 2·...】
+（重复以上结构）
+
+...
+
+【章末钩子】
+（一句话·本章末尾留下的悬念或情绪状态，不能比蓝图"伏笔互动·新埋"更超前）
+
+==== 硬性约束 ====
+1. 总篇幅 1500-3000 字（精简优先，不要写成正文）
+2. 不写完整对话台词，只标方向与目的
+3. 不写细致环境感官描写（留给正文发挥）
+4. 不引入蓝图未提及的新角色/新地点
+5. 严格执行蓝图中的"必须出现的动作清单"
+
+仅返回细纲文本，不要解释任何内容。
+"""
+
+_DEFAULT_PROMPTS["next_chapter_draft_improv_prompt"] = """\
+你是一位资深的长篇小说作家。本作品采用"即兴写作"模式——
+没有全书蓝图，只有作者刚刚确认的**单章蓝图**（与可选的细纲）。
+请严格按蓝图执行，写出第 {chapter_number} 章的完整正文。
+
+==== 已有素材 ====
+【核心种子】
+{core_seed}
+
+【世界观】
+{world_building}
+
+【角色动力学】
+{character_dynamics}
+
+【已写章节累积摘要】
+{global_summary}
+
+【角色当前状态】
+{character_state}
+
+【伏笔池】
+{open_threads}
+
+【前章结尾段（约 800 字）】
+{previous_chapter_excerpt}
+
+==== 本章蓝图（最高优先级·必须执行） ====
+{chapter_blueprint}
+
+==== 本章细纲（如有） ====
+{chapter_outline}
+
+==== 用户指导 ====
+{user_guidance}
+
+==== 通用写作规范 ====
+
+【对话密度·硬性】
+按章节强度档执行：每 500-800 字至少 1 处对话。"默片感"——大段无对话叙述——禁止。
+
+【心理刻画·克制】
+角色面临选择/认知颠覆/独处时必须写心理；自由间接引语优先；每千字 1-2 段，不要过度铺陈。
+
+【反 AI 句式·禁用清单】
+全章累计不超过 1 处。禁用：
+- "不是 X 而是 Y" / "与其说是 A 不如说是 B" / "不仅是…更是…"
+- 三句以上排比否定
+- "看似…实则…" / "这意味着…" / "这象征着…"
+
+【元叙事·禁用】
+绝对不允许出现：
+- "心想：" / "暗忖" / "思忖道" 引号式心理
+- "仅此一句，未展开" / "按下不表" / "此处略过" 等旁白式 hedging
+- 任何对叙述本身的元注释
+
+【蓝图执行·硬性】
+蓝图中"必须出现的动作清单"逐条落实，不允许走通用模板替代。
+
+【字数·宁短勿冗】
+严格按蓝图【字数预算】区间执行。**禁止**用同义重复/形容词堆砌/微动作切碎/抒情尾巴凑字数。
+若内容自然短于预算下限，宁可少写，不许灌水。
+
+==== 输出 ====
+直接输出第 {chapter_number} 章正文，章首带【第 N 章 标题】格式。
+不要任何解释、不要 markdown 代码块包裹、不要章末补"本章完"等标记。
+"""
+
+_DEFAULT_PROMPTS["chapter_blueprint_single_revise_prompt"] = """\
+你是一位长篇小说策划。作者已有一份**单章蓝图**，现根据其修订建议重写。
+
+==== 已有素材（保持锚定·不可改动） ====
+【核心种子】
+{core_seed}
+
+【世界观】
+{world_building}
+
+【角色动力学】
+{character_dynamics}
+
+【已写章节累积摘要】
+{global_summary}
+
+【角色当前状态】
+{character_state}
+
+【伏笔池】
+{open_threads}
+
+==== 当前单章蓝图（修订前） ====
+本章序号：第 {chapter_number} 章
+{current_blueprint}
+
+==== 作者修订建议 ====
+{revision_guidance}
+
+==== 任务 ====
+基于修订建议重写完整的单章蓝图。
+
+**修订原则**：
+1. **仅调整**修订建议指向的字段——其他字段原样保留（包括标题/章节强度/字数预算/衔接点/核心剧情/本章核心冲突或互动/伏笔互动/节奏规划/对话密度目标）
+2. 若修订与角色档案/world_building/伏笔池冲突，按修订建议为准（用户清楚自己想要什么）
+3. **保持原蓝图的字段结构和格式**——仅返回完整重写后的蓝图，每个字段都要有
+
+仅返回重写后的完整蓝图全文，不要解释，不要标注 "修改清单" 之类的元信息。
+"""
+
+_DEFAULT_PROMPTS["chapter_outline_single_revise_prompt"] = """\
+你是一位长篇小说策划。作者已有一份**单章细纲**，现根据其修订建议重写。
+
+==== 已有素材（保持锚定） ====
+【核心种子】
+{core_seed}
+
+【角色动力学摘录】
+{character_dynamics}
+
+【角色当前状态】
+{character_state}
+
+【已写章节累积摘要】
+{global_summary}
+
+【伏笔池】
+{open_threads}
+
+==== 本章蓝图（必须遵循·不可偏离） ====
+{chapter_blueprint}
+
+==== 当前单章细纲（修订前） ====
+{current_outline}
+
+==== 作者修订建议 ====
+{revision_guidance}
+
+==== 任务 ====
+基于修订建议重写完整的单章细纲。
+
+**修订原则**：
+1. **仅调整**修订建议指向的场景/字段——其他场景原样保留
+2. 不允许偏离单章蓝图——所有"必须出现的动作清单"仍需落实
+3. 保持分场结构：场景序号 / 地点-时间 / 在场角色 / 事件骨架 / 情绪-张力 / 过渡
+4. 总篇幅 1500-3000 字，仍是骨架而非正文，不写完整对话与环境描写
+
+仅返回重写后的完整细纲，不要解释。
+"""
+
+_DEFAULT_PROMPTS["open_threads_update_prompt"] = """\
+你是一位资深的连载小说编辑。当前作品采用"即兴写作"模式——没有全书蓝图，
+靠**伏笔池（open_threads）**维持连续性。请基于刚定稿的本章正文，更新伏笔池。
+
+==== 旧伏笔池（更新前） ====
+{old_open_threads}
+
+==== 本章正文 ====
+{chapter_text}
+
+==== 本章蓝图（参考·含【伏笔互动】字段） ====
+{chapter_blueprint}
+
+==== 任务 ====
+
+请生成更新后的伏笔池，严格按下列三段结构：
+
+=== 已埋未收 ===
+（已经在某章埋下、还未回收的钩子。每条标注首次出现章节、建议回收窗口）
+- [第 X 章] {{钩子简述}} — 建议 N 章内回收
+- [第 Y 章] {{钩子简述}} — 长线可拖
+
+=== 已收未结 ===
+（角色弧线/心结/关系演变·已开始未完成的）
+- {{角色名}} 的 {{弧线主题}}：进度 X% → Y%（{{当前阶段简述}}），目标"{{终点状态}}"
+- {{关系名}} 的 {{演变方向}}：进度 X% → Y%
+
+=== 待开发 ===
+（已暗示但还未正式登场/未深入的角色或线索）
+- {{角色名/线索}}：（提及章节/状态）
+
+==== 更新规则 ====
+
+1. **回收**：本章已经回收/落实的钩子 → 从"已埋未收"中**删除**该条
+2. **推进**：本章推进了的角色弧线 → 在"已收未结"中**更新进度**
+3. **新增**：本章新埋的钩子 → 加到"已埋未收"末尾，带上当前章节号
+4. **结清**：本章完结的弧线 → 从"已收未结"中**删除**
+5. 长期不动的钩子（已超过建议窗口仍未回收）保留并加注 ⚠️ 标记
+6. 若旧伏笔池为空（首章定稿），直接初始化即可
+
+==== 输出 ====
+仅返回更新后的伏笔池全文，按上述三段结构组织。**不要**输出任何解释、注释或 diff。
+若某段为空，保留段标题并写"（无）"。
+"""
+
+# ============================================================
 # 运行时活跃提示词（唯一数据源）
 # ============================================================
 _active_prompts = dict(_DEFAULT_PROMPTS)
@@ -1606,6 +1962,12 @@ narrative_calibration_discriminate_prompt = _active_prompts["narrative_calibrati
 narrative_calibration_revise_prompt = _active_prompts["narrative_calibration_revise_prompt"]
 brainstorm_system_prompt = _active_prompts["brainstorm_system_prompt"]
 detailed_outline_prompt = _active_prompts["detailed_outline_prompt"]
+chapter_blueprint_single_prompt = _active_prompts["chapter_blueprint_single_prompt"]
+chapter_outline_single_prompt = _active_prompts["chapter_outline_single_prompt"]
+next_chapter_draft_improv_prompt = _active_prompts["next_chapter_draft_improv_prompt"]
+open_threads_update_prompt = _active_prompts["open_threads_update_prompt"]
+chapter_blueprint_single_revise_prompt = _active_prompts["chapter_blueprint_single_revise_prompt"]
+chapter_outline_single_revise_prompt = _active_prompts["chapter_outline_single_revise_prompt"]
 
 
 # ============================================================

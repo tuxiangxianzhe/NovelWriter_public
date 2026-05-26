@@ -26,6 +26,14 @@ export const projectsApi = {
   delete: (name: string) => api.delete(`/projects/${encodeURIComponent(name)}`),
   active: () => api.get('/projects/active'),
   discover: () => api.post('/projects/discover'),
+  listBackups: (name: string) =>
+    api.get(`/projects/${encodeURIComponent(name)}/backups`),
+  createBackup: (name: string, note = '') =>
+    api.post(`/projects/${encodeURIComponent(name)}/backups`, null, { params: { note } }),
+  restoreBackup: (name: string, backupId: string) =>
+    api.post(`/projects/${encodeURIComponent(name)}/backups/${encodeURIComponent(backupId)}/restore`),
+  deleteBackup: (name: string, backupId: string) =>
+    api.delete(`/projects/${encodeURIComponent(name)}/backups/${encodeURIComponent(backupId)}`),
 }
 
 // ── Config ───────────────────────────────────────────────────────────────────
@@ -209,6 +217,26 @@ export const generateApi = {
   stepCharacters: () => `/generate/architecture/step/characters`,
   stepWorld: () => `/generate/architecture/step/world`,
   stepPlot: () => `/generate/architecture/step/plot`,
+  // ── 即兴写作模式 ──
+  workflowMode: (filepath: string) =>
+    api.get(`/generate/workflow_mode`, { params: { filepath } }),
+  blueprintSingleUrl: () => `/generate/blueprint_single`,
+  blueprintSingleReviseUrl: () => `/generate/blueprint_single/revise`,
+  outlineSingleUrl: () => `/generate/outline_single`,
+  outlineSingleReviseUrl: () => `/generate/outline_single/revise`,
+  chapterImprovUrl: () => `/generate/chapter_improv`,
+  getBlueprintSingle: (num: number, filepath: string) =>
+    api.get(`/generate/blueprint_single/${num}`, { params: { filepath } }),
+  saveBlueprintSingle: (num: number, content: string, filepath: string) =>
+    api.put(`/generate/blueprint_single/${num}`, { content, filepath }),
+  getOutlineSingle: (num: number, filepath: string) =>
+    api.get(`/generate/outline_single/${num}`, { params: { filepath } }),
+  saveOutlineSingle: (num: number, content: string, filepath: string) =>
+    api.put(`/generate/outline_single/${num}`, { content, filepath }),
+  getOpenThreads: (filepath: string) =>
+    api.get(`/generate/open_threads`, { params: { filepath } }),
+  saveOpenThreads: (content: string, filepath: string) =>
+    api.put(`/generate/open_threads`, { content, filepath }),
 }
 
 // ── XP Presets ───────────────────────────────────────────────────────────────
@@ -259,6 +287,8 @@ export const filesApi = {
   list: (filepath: string) => api.get('/files', { params: { filepath } }),
   content: (filepath: string, path: string) =>
     api.get('/files/content', { params: { filepath, path } }),
+  save: (filepath: string, path: string, content: string) =>
+    api.put('/files/content', { content }, { params: { filepath, path } }),
 }
 
 // ── Logs ─────────────────────────────────────────────────────────────────────
